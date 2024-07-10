@@ -111,7 +111,7 @@ namespace sibr
                                      // OpenXR eye position is in world coordinates system (+x: right, +y: up; +z: backward)
                                      // 3DGS reference scenes have the following coordinate system : +x: right, +y: down, +z: forward
                                      // Let's rotate the camera to have the right-side up scene
-                                     if (m_flipY)
+                                     /* if (m_flipY)
                                      {
                                          Eigen::Matrix3f mat;
                                          mat << 1.0f, 0.0f, 0.0f,
@@ -120,11 +120,12 @@ namespace sibr
                                          Eigen::Matrix3f rot = mat * q.matrix();
                                          q = Eigen::Quaternionf(rot);
                                          pos = mat * pos;
-                                     }
+                                     } */
+                                     pos.z() = -pos.z();
 
                                      // Define camera from OpenXR eye view position/orientation/fov
                                      Camera cam;
-                                     cam.rotate(q);
+                                     cam.rotate(camera.rotation() * q);
                                      cam.position(pos);
                                      cam.zfar(camera.zfar());
                                      cam.znear(camera.znear());
