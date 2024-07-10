@@ -154,10 +154,22 @@ namespace sibr{
 		const std::string&								meshPath(void) const override;
 
 		/**
+		* \brief Getter for the mesh path where the dataset is located.
+		*
+		*/
+		const std::string&								configPath(void) const override;
+
+		/**
 		* \brief Setter for the mesh path where the dataset is located.
 		*
 		*/
 		void											meshPath(std::string & path)  override;
+
+		/**
+		* \brief Setter for the mesh path where the dataset is located.
+		*
+		*/
+		void											configPath(std::string & path)  override;
 
 		/**
 		* \brief Getter for the dataset type.
@@ -219,6 +231,7 @@ namespace sibr{
 		std::vector<InputCamera::Ptr>				_camInfos;
 		std::string									_basePathName;
 		std::string									_meshPath;
+		std::string									_configPath;
 		std::vector<sibr::ImageListFile::Infos>		_imgInfos;
 		std::string									_imgPath = "";
 		std::vector<bool>							_activeImages;
@@ -272,9 +285,19 @@ namespace sibr{
 		return _meshPath;
 	}
 
+	inline const std::string & ParseData::configPath(void) const
+	{
+		return _configPath;
+	}
+
 	inline void ParseData::meshPath(std::string& path)
 	{
 		_meshPath = path;
+	}
+
+	inline void ParseData::configPath(std::string& path)
+	{
+		_configPath = path;
 	}
 
 	inline void		ParseData::datasetType(IParseData::Type dataType) {

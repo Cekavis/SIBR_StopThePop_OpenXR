@@ -123,10 +123,22 @@ namespace sibr{
 		virtual const std::string&								meshPath(void) const = 0;
 
 		/**
+		* \brief Getter for the mesh path where the dataset is located.
+		*
+		*/
+		virtual const std::string&								configPath(void) const = 0;
+
+		/**
 		* \brief Setter for the mesh path where the dataset is located.
 		*
 		*/
 		virtual void											meshPath(std::string & path)  = 0;
+
+		/**
+		* \brief Setter for the mesh path where the dataset is located.
+		*
+		*/
+		virtual void											configPath(std::string & path)  = 0;
 
 		/**
 		* \brief Getter for the dataset type.

@@ -13,7 +13,6 @@
 #include <core/graphics/GUI.hpp>
 #include <thread>
 #include <boost/asio.hpp>
-#include <rasterizer.h>
 #include <imgui_internal.h>
 
 // Define the types and sizes that make up the contents of each Gaussian 
@@ -397,6 +396,7 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 	// Create space for view parameters
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&view_cuda, sizeof(sibr::Matrix4f)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&proj_cuda, sizeof(sibr::Matrix4f)));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&proj_inv_cuda, sizeof(sibr::Matrix4f)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&cam_pos_cuda, 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&background_cuda, 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&rect_cuda, 2 * P * sizeof(int)));
@@ -417,6 +417,56 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 	geomBufferFunc = resizeFunctional(&geomPtr, allocdGeom);
 	binningBufferFunc = resizeFunctional(&binningPtr, allocdBinning);
 	imgBufferFunc = resizeFunctional(&imgPtr, allocdImg);
+
+	parseJSON();
+}
+
+void sibr::GaussianView::parseJSON()
+{
+	std::string json_path = _scene->data()->configPath();
+	std::ifstream json_file(json_path, std::ios::in);
+
+	splatting_settings = CudaRasterizer::SplattingSettings();
+
+	// return if no config file is found - use default parameters (Vanilla 3DGS)
+ 	if (json_file.fail()) return;
+	nlohmann::json js = nlohmann::json::parse(json_file);
+
+	// get settings from config
+	splatting_settings = js.get<CudaRasterizer::SplattingSettings>();
+
+	// sanity checks
+	if (CudaRasterizer::isInvalidSortMode(splatting_settings.sort_settings.sort_mode))
+	{
+		SIBR_LOG << "Invalid Sort Mode in " << json_path << " ("<< splatting_settings.sort_settings.sort_mode << "): continuing with default" << std::endl;
+		splatting_settings.sort_settings.sort_mode = CudaRasterizer::SortMode::GLOBAL;
+	}
+	if (CudaRasterizer::isInvalidSortOrder(splatting_settings.sort_settings.sort_order))
+	{
+		SIBR_LOG << "Invalid Sort Order in " << json_path << " ("<< splatting_settings.sort_settings.sort_order << "): continuing with default" << std::endl;
+		splatting_settings.sort_settings.sort_order = CudaRasterizer::GlobalSortOrder::VIEWSPACE_Z;
+	}
+	if (splatting_settings.sort_settings.hasModifiableWindowSize())
+	{
+		auto sort_mode = splatting_settings.sort_settings.sort_mode;
+		auto test_function = [&](std::vector<int> vec, const char* what, int default_value, int& variable)
+		{
+			if (std::find(vec.begin(), vec.end(), variable) == vec.end())
+			{
+				SIBR_LOG << "Invalid " << what << " Size in " << json_path << " ("<< variable << "): continuing with default" << std::endl;
+				variable = default_value;
+			}
+		};
+		if (sort_mode == CudaRasterizer::SortMode::HIERARCHICAL)
+		{
+			test_function(CudaRasterizer::per_pixel_queue_sizes_hier, "Per-Pixel Queue", 4, splatting_settings.sort_settings.queue_sizes.per_pixel);
+			test_function(CudaRasterizer::twobytwo_tile_queue_sizes, "2x2-Tile Queue", 8, splatting_settings.sort_settings.queue_sizes.tile_2x2);
+		}
+		if (sort_mode == CudaRasterizer::SortMode::PER_PIXEL_KBUFFER)
+		{
+			test_function(CudaRasterizer::per_pixel_queue_sizes, "Per-Pixel Queue", 1, splatting_settings.sort_settings.queue_sizes.per_pixel);
+		}
+	}
 }
 
 void sibr::GaussianView::setResolution(const Vector2i &size)
@@ -508,9 +558,12 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		float tan_fovy = tan(eye.fovy() * 0.5f);
 		float tan_fovx = tan_fovy * eye.aspect();
 
+		auto proj_inv_mat = sibr::Matrix4f(proj_mat.inverse());
+
 		// Copy frame-dependent data to GPU
 		CUDA_SAFE_CALL(cudaMemcpy(view_cuda, view_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
+		CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
 
 		float* image_cuda = nullptr;
@@ -527,7 +580,6 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		}
 
 		// Rasterize
-		int* rects = _fastCulling ? rect_cuda : nullptr;
 		float* boxmin = _cropping ? (float*)&_boxmin : nullptr;
 		float* boxmax = _cropping ? (float*)&_boxmax : nullptr;
 		CudaRasterizer::Rasterizer::forward(
@@ -537,6 +589,8 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			count, _sh_degree, 16,
 			background_cuda,
 			_resolution.x(), _resolution.y(),
+			splatting_settings,
+			debugMode,
 			pos_cuda,
 			shs_cuda,
 			nullptr,
@@ -547,15 +601,14 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			nullptr,
 			view_cuda,
 			proj_cuda,
+			proj_inv_cuda,
 			cam_pos_cuda,
 			tan_fovx,
 			tan_fovy,
 			false,
 			image_cuda,
 			nullptr,
-			rects,
-			boxmin,
-			boxmax
+			false
 		);
 
 		if (!_interop_failed)
@@ -580,10 +633,22 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 
 void sibr::GaussianView::onUpdate(Input & input)
 {
+	if (input.mouseButton().isReleased(Mouse::Code::Right))
+	{
+		updateDebugPixelLocation = !updateDebugPixelLocation;
+	}
 }
 
 void sibr::GaussianView::onGUI()
 {
+	if (updateDebugPixelLocation && updateWithMouse)
+	{
+		auto viewWindowPos = sibr::getImGuiWindowPosition("Point view");
+		auto mousePos = ImGui::GetMousePos();
+		debugMode.debugPixel[0] = mousePos.x - viewWindowPos.x;
+		debugMode.debugPixel[1] = mousePos.y - viewWindowPos.y;
+	}
+
 	// Generate and update UI elements
 	const std::string guiName = "3D Gaussians";
 	if (ImGui::Begin(guiName.c_str())) 
@@ -602,35 +667,145 @@ void sibr::GaussianView::onGUI()
 	if (currMode == "Splats")
 	{
 		ImGui::SliderFloat("Scaling Modifier", &_scalingModifier, 0.001f, 1.0f);
-	}
-	ImGui::Checkbox("Fast culling", &_fastCulling);
 
-	ImGui::Checkbox("Crop Box", &_cropping);
-	if (_cropping)
-	{
-		ImGui::SliderFloat("Box Min X", &_boxmin.x(), _scenemin.x(), _scenemax.x());
-		ImGui::SliderFloat("Box Min Y", &_boxmin.y(), _scenemin.y(), _scenemax.y());
-		ImGui::SliderFloat("Box Min Z", &_boxmin.z(), _scenemin.z(), _scenemax.z());
-		ImGui::SliderFloat("Box Max X", &_boxmax.x(), _scenemin.x(), _scenemax.x());
-		ImGui::SliderFloat("Box Max Y", &_boxmax.y(), _scenemin.y(), _scenemax.y());
-		ImGui::SliderFloat("Box Max Z", &_boxmax.z(), _scenemin.z(), _scenemax.z());
-		ImGui::InputText("File", _buff, 512);
-		if (ImGui::Button("Save"))
+		ImGui::Checkbox("Crop Box", &_cropping);
+		if (_cropping)
 		{
-			std::vector<Pos> pos(count);
-			std::vector<Rot> rot(count);
-			std::vector<float> opacity(count);
-			std::vector<SHs<3>> shs(count);
-			std::vector<Scale> scale(count);
-			CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(pos.data(), pos_cuda, sizeof(Pos) * count, cudaMemcpyDeviceToHost));
-			CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(rot.data(), rot_cuda, sizeof(Rot) * count, cudaMemcpyDeviceToHost));
-			CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(opacity.data(), opacity_cuda, sizeof(float) * count, cudaMemcpyDeviceToHost));
-			CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(shs.data(), shs_cuda, sizeof(SHs<3>) * count, cudaMemcpyDeviceToHost));
-			CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(scale.data(), scale_cuda, sizeof(Scale) * count, cudaMemcpyDeviceToHost));
-			savePly(_buff, pos, shs, opacity, scale, rot, _boxmin, _boxmax);
+			ImGui::SliderFloat("Box Min X", &_boxmin.x(), _scenemin.x(), _scenemax.x());
+			ImGui::SliderFloat("Box Min Y", &_boxmin.y(), _scenemin.y(), _scenemax.y());
+			ImGui::SliderFloat("Box Min Z", &_boxmin.z(), _scenemin.z(), _scenemax.z());
+			ImGui::SliderFloat("Box Max X", &_boxmax.x(), _scenemin.x(), _scenemax.x());
+			ImGui::SliderFloat("Box Max Y", &_boxmax.y(), _scenemin.y(), _scenemax.y());
+			ImGui::SliderFloat("Box Max Z", &_boxmax.z(), _scenemin.z(), _scenemax.z());
+			ImGui::InputText("File", _buff, 512);
+			if (ImGui::Button("Save"))
+			{
+				std::vector<Pos> pos(count);
+				std::vector<Rot> rot(count);
+				std::vector<float> opacity(count);
+				std::vector<SHs<3>> shs(count);
+				std::vector<Scale> scale(count);
+				CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(pos.data(), pos_cuda, sizeof(Pos) * count, cudaMemcpyDeviceToHost));
+				CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(rot.data(), rot_cuda, sizeof(Rot) * count, cudaMemcpyDeviceToHost));
+				CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(opacity.data(), opacity_cuda, sizeof(float) * count, cudaMemcpyDeviceToHost));
+				CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(shs.data(), shs_cuda, sizeof(SHs<3>) * count, cudaMemcpyDeviceToHost));
+				CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(scale.data(), scale_cuda, sizeof(Scale) * count, cudaMemcpyDeviceToHost));
+				savePly(_buff, pos, shs, opacity, scale, rot, _boxmin, _boxmax);
+			}
 		}
-	}
 
+		if (ImGui::CollapsingHeader("StopThePop", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			if (ImGui::BeginCombo("Sort Order", toString(splatting_settings.sort_settings.sort_order).c_str()))
+			{
+				if (ImGui::Selectable("VIEWSPACE_Z"))
+					splatting_settings.sort_settings.sort_order = CudaRasterizer::GlobalSortOrder::VIEWSPACE_Z;
+				if (ImGui::Selectable("DISTANCE"))
+					splatting_settings.sort_settings.sort_order = CudaRasterizer::GlobalSortOrder::DISTANCE;
+				if (ImGui::Selectable("PER_TILE_DEPTH_CENTER"))
+					splatting_settings.sort_settings.sort_order = CudaRasterizer::GlobalSortOrder::PER_TILE_DEPTH_CENTER;
+				if (ImGui::Selectable("PER_TILE_DEPTH_MAXPOS"))
+					splatting_settings.sort_settings.sort_order = CudaRasterizer::GlobalSortOrder::PER_TILE_DEPTH_MAXPOS;
+				ImGui::EndCombo();
+			}
+
+			if (ImGui::BeginCombo("Sort Mode", toString(splatting_settings.sort_settings.sort_mode).c_str()))
+			{
+				if (ImGui::Selectable("GLOBAL"))
+					splatting_settings.sort_settings.sort_mode = CudaRasterizer::SortMode::GLOBAL;
+				if (ImGui::Selectable("FULL SORT"))
+					splatting_settings.sort_settings.sort_mode = CudaRasterizer::SortMode::PER_PIXEL_FULL;
+				if (ImGui::Selectable("KBUFFER"))
+					splatting_settings.sort_settings.sort_mode = CudaRasterizer::SortMode::PER_PIXEL_KBUFFER;
+				if (ImGui::Selectable("HIERARCHICAL"))
+					splatting_settings.sort_settings.sort_mode = CudaRasterizer::SortMode::HIERARCHICAL;
+				ImGui::EndCombo();
+			}
+
+			if (splatting_settings.sort_settings.sort_mode == CudaRasterizer::SortMode::PER_PIXEL_KBUFFER)
+			{
+				if (ImGui::BeginCombo("Per-Pixel Queue Size", std::to_string(splatting_settings.sort_settings.queue_sizes.per_pixel).c_str()))
+				{
+					for (auto z : CudaRasterizer::per_pixel_queue_sizes){
+						if (ImGui::Selectable(std::to_string(z).c_str()))
+							splatting_settings.sort_settings.queue_sizes.per_pixel = z;
+					}
+					ImGui::EndCombo();
+				}
+			}
+
+			if (splatting_settings.sort_settings.sort_mode == CudaRasterizer::SortMode::HIERARCHICAL)
+			{
+				if (ImGui::BeginCombo("Per-Pixel Queue Size", std::to_string(splatting_settings.sort_settings.queue_sizes.per_pixel).c_str()))
+				{
+					for (auto z : CudaRasterizer::per_pixel_queue_sizes_hier){
+						if (ImGui::Selectable(std::to_string(z).c_str()))
+							splatting_settings.sort_settings.queue_sizes.per_pixel = z;
+					}
+					ImGui::EndCombo();
+				}
+
+				if (ImGui::BeginCombo("2x2 Tile Queue Size", std::to_string(splatting_settings.sort_settings.queue_sizes.tile_2x2).c_str()))
+				{
+					for (auto z : CudaRasterizer::twobytwo_tile_queue_sizes){
+						if (ImGui::Selectable(std::to_string(z).c_str()))
+							splatting_settings.sort_settings.queue_sizes.tile_2x2 = z;
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::Checkbox("Hier. 4x4 Tile Culling", &splatting_settings.culling_settings.hierarchical_4x4_culling);
+			}
+
+
+			ImGui::Checkbox("Rect Culling", &splatting_settings.culling_settings.rect_bounding);
+			ImGui::Checkbox("Opacity Culling", &splatting_settings.culling_settings.tight_opacity_bounding);
+			ImGui::Checkbox("Tile-based Culling", &splatting_settings.culling_settings.tile_based_culling);
+			ImGui::Checkbox("Load Balancing", &splatting_settings.load_balancing);
+			ImGui::Checkbox("Proper EWA Scaling", &splatting_settings.proper_ewa_scaling);
+		}
+
+
+		if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			if (ImGui::BeginCombo("Debug Visualization", toString(debugMode.type).data()))
+			{
+				if (ImGui::Selectable("Disabled"))
+					debugMode.type = DebugVisualization::Disabled;
+				if (ImGui::Selectable("Sort Error: Opacity Weighted"))
+					debugMode.type = DebugVisualization::SortErrorOpacity;
+				if (ImGui::Selectable("Sort Error: Distance Weighted"))
+					debugMode.type = DebugVisualization::SortErrorDistance;
+				if (ImGui::Selectable("Gaussian Count Per Tile"))
+					debugMode.type = DebugVisualization::GaussianCountPerTile;
+				if (ImGui::Selectable("Gaussian Count Per Pixel"))
+					debugMode.type = DebugVisualization::GaussianCountPerPixel;
+				if (ImGui::Selectable("Depth"))
+					debugMode.type = DebugVisualization::Depth;
+				if (ImGui::Selectable("Transmittance"))
+					debugMode.type = DebugVisualization::Transmittance;
+				ImGui::EndCombo();
+			}
+
+			if (debugMode.type != DebugVisualization::Disabled)
+			{
+				ImGui::Checkbox("Manual Normalization", &debugMode.debug_normalize);
+				if (debugMode.debug_normalize)
+				{
+					ImGui::InputFloat2("Normalize Min/Max", debugMode.minMax);
+				}
+				ImGui::Checkbox("Input With Mouse", &updateWithMouse);
+				ImGui::InputInt2("Mouse Debug Pos", debugMode.debugPixel);
+			}
+
+			ImGui::Checkbox("Timing", &debugMode.timing_enabled);
+			if (debugMode.timing_enabled)
+				ImGui::Text("%s", (char*) debugMode.timings_text.c_str());
+			else
+				debugMode.timings_text = "";
+		}
+		
+	}
 	ImGui::End();
 
 	if(!*_dontshow && !accepted && _interop_failed)
@@ -672,6 +847,7 @@ sibr::GaussianView::~GaussianView()
 
 	cudaFree(view_cuda);
 	cudaFree(proj_cuda);
+	cudaFree(proj_inv_cuda);
 	cudaFree(cam_pos_cuda);
 	cudaFree(background_cuda);
 	cudaFree(rect_cuda);

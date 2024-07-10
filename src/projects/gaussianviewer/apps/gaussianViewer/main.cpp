@@ -212,6 +212,11 @@ int main(int ac, char** av)
 	const unsigned int sceneResWidth = usedResolution.x();
 	const unsigned int sceneResHeight = usedResolution.y();
 
+	// set correct json file
+	std::string configfile =  myArgs.modelPath.get();
+	configfile += "/config.json";
+	scene->data()->configPath(configfile);
+
 	// Create the ULR view.
 	GaussianView::Ptr	gaussianView(new GaussianView(scene, sceneResWidth, sceneResHeight, plyfile.c_str(), &messageRead, sh_degree, white_background, !myArgs.noInterop, device));
 

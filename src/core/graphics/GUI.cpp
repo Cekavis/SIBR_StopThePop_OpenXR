@@ -21,6 +21,7 @@
 
 namespace sibr
 {
+	std::unordered_map<std::string, ImVec2> windowPositions;
 	
 	bool		showImGuiWindow(const std::string& windowTitle, const IRenderTarget& rt, ImGuiWindowFlags flags, Viewport & viewport,  bool invalidTexture,  bool updateLayout, int handle )
 	{
@@ -47,6 +48,8 @@ namespace sibr
 			pos.x += offset.x();
 			pos.y += offset.y();
 
+			windowPositions[windowTitle] = pos;
+
 			
 			ImGui::SetCursorPos(ImVec2(offset.x(), ImGui::GetTitleBarHeight()+offset.y()));
 			ImGui::InvisibleButton((windowTitle + "--TEXTURE-INVISIBLE_BUTTON").c_str(), ImVec2(size.x(), size.y()));
@@ -69,6 +72,11 @@ namespace sibr
 		::ImGui::End();
 
 		return isWindowFocused;
+	}
+
+	SIBR_GRAPHICS_EXPORT ImVec2	getImGuiWindowPosition(const std::string& windowTitle)
+	{
+		return windowPositions[windowTitle];
 	}
 
 	Mesh::Ptr generateMeshForText(const std::string & text, unsigned int & separationIndex){

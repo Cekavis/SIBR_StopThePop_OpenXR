@@ -26,6 +26,9 @@
 #include <functional>
 # include "GaussianSurfaceRenderer.hpp"
 
+#include <stopthepop/rasterizer_debug.h>
+#include <rasterizer.h>
+
 namespace CudaRasterizer
 {
 	class Rasterizer;
@@ -76,6 +79,11 @@ namespace sibr {
 		 */
 		void onGUI() override;
 
+		/**
+		 * Parse json config.
+		 */
+		void parseJSON();
+
 		/** \return a reference to the scene */
 		const std::shared_ptr<sibr::BasicIBRScene> & getScene() const { return _scene; }
 
@@ -90,13 +98,23 @@ namespace sibr {
 
 	protected:
 
+		bool updateDebugPixelLocation{true};
+		bool updateWithMouse{true};
+		DebugVisualizationData debugMode{
+			DebugVisualization::Disabled, 0, 0, [](const DebugVisualizationData& instance, float value, float min, float max, float avg, float std) {
+				SIBR_LOG << toString(instance.type) << " for pixel (" << instance.debugPixel[0] << ", " << instance.debugPixel[1] <<
+										"): value=" << value << ", min=" << min << ", max=" << max << ", avg=" << avg << ", std=" << std << std::endl;
+			}
+		};
+
 		std::string currMode = "Splats";
 
 		bool _cropping = false;
 		sibr::Vector3f _boxmin, _boxmax, _scenemin, _scenemax;
 		char _buff[512] = "cropped.ply";
 
-		bool _fastCulling = true;
+		CudaRasterizer::SplattingSettings splatting_settings;
+
 		int _device = 0;
 		int _sh_degree = 3;
 
@@ -117,6 +135,7 @@ namespace sibr {
 
 		float* view_cuda;
 		float* proj_cuda;
+		float* proj_inv_cuda;
 		float* cam_pos_cuda;
 		float* background_cuda;
 

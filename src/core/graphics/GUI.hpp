@@ -20,6 +20,8 @@
 
 #include <imgui/imgui.h>
 
+#include <unordered_map>
+
 namespace sibr
 {
 	
@@ -35,6 +37,8 @@ namespace sibr
 	\ingroup sibr_graphics
 	*/
 	SIBR_GRAPHICS_EXPORT bool		showImGuiWindow(const std::string& windowTitle, const IRenderTarget& rt, ImGuiWindowFlags flags, Viewport & viewport,  bool invalidTexture,  bool updateLayout, int handle = 0);
+
+	SIBR_GRAPHICS_EXPORT ImVec2		getImGuiWindowPosition(const std::string& windowTitle);
 
 	/**
 	Helper that compute the location and extent to display an image in a given region without cropping or distorting it
