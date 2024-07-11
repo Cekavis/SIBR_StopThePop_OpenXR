@@ -621,7 +621,7 @@ namespace sibr
 						const std::string outputVideo = saveFile + ".mp4";
 						if(!_videoFrames.empty()) {
 							SIBR_LOG << "Exporting video to : " << outputVideo << " ..." << std::flush;
-							FFVideoEncoder vdoEncoder(outputVideo, 30, Vector2i(_videoFrames[0].cols, _videoFrames[0].rows));
+							FFVideoEncoder vdoEncoder(outputVideo, 60, Vector2i(_videoFrames[0].cols, _videoFrames[0].rows));
 							for (int i = 0; i < _videoFrames.size(); i++) {
 								vdoEncoder << _videoFrames[i];
 							}
