@@ -121,6 +121,7 @@ namespace sibr
                                          q = Eigen::Quaternionf(rot);
                                          pos = mat * pos;
                                      } */
+                                     pos.y() = -pos.y();
                                      pos.z() = -pos.z();
 
                                      // Define camera from OpenXR eye view position/orientation/fov
