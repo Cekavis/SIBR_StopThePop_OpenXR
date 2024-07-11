@@ -197,7 +197,7 @@ int main(int ac, char** av)
 
 	rendering_width = (rendering_width <= 0) ? std::min(1200U, scene_width) : rendering_width;
 	rendering_height = (rendering_height <= 0) ? std::min(1200U, scene_width) / scene_aspect_ratio : rendering_height;
-	if ((rendering_width > 0) && !myArgs.force_aspect_ratio ) {
+	if ((rendering_width > 0) && !myArgs.force_aspect_ratio && myArgs.rendering_mode != 2) {
 		if (abs(scene_aspect_ratio - rendering_aspect_ratio) > 0.001f) {
 			if (scene_width > scene_height) {
 				rendering_height = rendering_width / scene_aspect_ratio;
