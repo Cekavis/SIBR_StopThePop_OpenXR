@@ -508,8 +508,16 @@ namespace sibr {
 		_clippingPlanes[1] = _currentCamera.zfar();
 	}
 
+	void InteractiveCameraHandler::updateCamera(const IRenderingMode::Ptr & renderingMode) {
+		_finalCamera = _currentCamera;
+		auto q = renderingMode->getRotation();
+		auto pos = renderingMode->getPosition();
+		_finalCamera.rotation(_finalCamera.rotation() * q);
+		_finalCamera.translate(pos, _currentCamera.transform());
+	}
+
 	const sibr::InputCamera& InteractiveCameraHandler::getCamera(void) const {
-		return _currentCamera;
+		return _finalCamera;
 	}
 
 	void InteractiveCameraHandler::onRender(const sibr::Viewport& viewport) {

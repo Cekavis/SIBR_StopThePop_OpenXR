@@ -20,6 +20,8 @@
 #include "core/assets/InputCamera.hpp"
 #include "core/graphics/Viewport.hpp"
 
+# include "core/view/RenderingMode.hpp"
+
 namespace sibr {
 	class Input;
 
@@ -33,6 +35,11 @@ namespace sibr {
 		SIBR_CLASS_PTR(ICameraHandler)
 
 	public:
+
+		/** Update camera with renderingMode.
+		 * \param renderingMode the rendering mode
+		 */
+		virtual void updateCamera(const IRenderingMode::Ptr & renderingMode){};
 
 		/** Update the camera handler state.
 		\param input user input

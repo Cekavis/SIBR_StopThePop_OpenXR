@@ -49,6 +49,11 @@ namespace sibr
         /** \return the right eye RT. */
         virtual const std::unique_ptr<RenderTargetRGB> &rRT() { return _rightRT; }
 
+		/** \return the head rotation. */
+		virtual Eigen::Quaternionf getRotation() override;
+		/** \return the head position. */
+		virtual Eigen::Vector3f getPosition() override;
+
         /** GUI for configuring OpenXR rendering */
         void onGui();
 

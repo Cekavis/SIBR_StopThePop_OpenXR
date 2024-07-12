@@ -88,6 +88,8 @@ namespace sibr
 		for (auto & subview : _ibrSubViews) {
 			if (subview.second.view->active()) {
 
+				subview.second.handler->updateCamera(_renderingMode);
+
 				renderSubView(subview.second);
 
 				if (_enableGUI && _showSubViewsGui) {

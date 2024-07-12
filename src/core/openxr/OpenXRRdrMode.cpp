@@ -106,8 +106,6 @@ namespace sibr
                                      OpenXRHMD::Eye eye = viewIndex == 0 ? OpenXRHMD::Eye::LEFT : OpenXRHMD::Eye::RIGHT;
 
                                      auto fov = this->m_openxrHmd->getFieldOfView(eye);
-                                     auto q = this->m_openxrHmd->getPoseQuaternion(eye);
-                                     auto pos = this->m_openxrHmd->getPosePosition(eye);
                                      // OpenXR eye position is in world coordinates system (+x: right, +y: up; +z: backward)
                                      // 3DGS reference scenes have the following coordinate system : +x: right, +y: down, +z: forward
                                      // Let's rotate the camera to have the right-side up scene
@@ -121,21 +119,28 @@ namespace sibr
                                          q = Eigen::Quaternionf(rot);
                                          pos = mat * pos;
                                      } */
-                                     pos.y() = -pos.y();
-                                     pos.z() = -pos.z();
+
+                                    auto q = camera.rotation();
+                                    auto pos = camera.position();
+                                    if (viewIndex == 1) {
+                                        q = this->m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::RIGHT) *
+                                            this->m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::LEFT).inverse() * q;
+                                        pos = this->m_openxrHmd->getPosePosition(OpenXRHMD::Eye::RIGHT) -
+                                            this->m_openxrHmd->getPosePosition(OpenXRHMD::Eye::LEFT) + pos;
+                                    }
 
                                      // Define camera from OpenXR eye view position/orientation/fov
                                      Camera cam;
-                                     cam.rotate(camera.rotation() * q);
+                                     cam.rotate(q);
                                      cam.position(pos);
                                      cam.zfar(camera.zfar());
                                      cam.znear(camera.znear());
                                      cam.fovy(fov.w() - fov.z());
                                      cam.aspect((fov.y() - fov.x()) / (fov.w() - fov.z()));
 
-                                     if (m_vrExperience == 1) { // 1: seated experience - used sibr_viewer current camera's position as default position
-                                         cam.translate(camera.position());
-                                     }
+                                    //  if (m_vrExperience == 1) { // 1: seated experience - used sibr_viewer current camera's position as default position
+                                    //      cam.translate(camera.position());
+                                    //  }
 
                                      // Note: setStereoCam() used in SteroAnaglyph canno be reused here,
                                      // because headset eye views have asymetric fov
@@ -186,6 +191,16 @@ namespace sibr
                                          optDest->unbind();
                                      }
                                  });
+    }
+
+    Eigen::Quaternionf OpenXRRdrMode::getRotation()
+    {
+        return m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::LEFT);
+    }
+
+    Eigen::Vector3f OpenXRRdrMode::getPosition()
+    {
+        return m_openxrHmd->getPosePosition(OpenXRHMD::Eye::LEFT);
     }
 
     void OpenXRRdrMode::onGui()
