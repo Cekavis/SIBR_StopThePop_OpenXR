@@ -87,13 +87,6 @@ namespace sibr
             return;
         }
 
-        // Get next pose prediction for rendering
-        m_openxrHmd->pollEvents();
-        if (!m_openxrHmd->waitNextFrame())
-        {
-            return;
-        }
-
         const int w = m_openxrHmd->getResolution().x();
         const int h = m_openxrHmd->getResolution().y();
 
@@ -120,14 +113,8 @@ namespace sibr
                                          pos = mat * pos;
                                      } */
 
-                                    auto q = camera.rotation();
-                                    auto pos = camera.position();
-                                    if (viewIndex == 1) {
-                                        q = this->m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::RIGHT) *
-                                            this->m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::LEFT).inverse() * q;
-                                        pos = this->m_openxrHmd->getPosePosition(OpenXRHMD::Eye::RIGHT) -
-                                            this->m_openxrHmd->getPosePosition(OpenXRHMD::Eye::LEFT) + pos;
-                                    }
+                                    auto q = viewIndex == 0 ? camera.rotation() : camera.rightTransform().rotation();
+                                    auto pos = viewIndex == 0 ? camera.position() : camera.rightTransform().position();
 
                                      // Define camera from OpenXR eye view position/orientation/fov
                                      Camera cam;
@@ -193,14 +180,24 @@ namespace sibr
                                  });
     }
 
-    Eigen::Quaternionf OpenXRRdrMode::getRotation()
+    void OpenXRRdrMode::preparePosePrediction()
     {
-        return m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye::LEFT);
+        // Get next pose prediction for rendering
+        m_openxrHmd->pollEvents();
+        if (!m_openxrHmd->waitNextFrame())
+        {
+            return;
+        }
     }
 
-    Eigen::Vector3f OpenXRRdrMode::getPosition()
+    Eigen::Quaternionf OpenXRRdrMode::getRotation(int idx)
     {
-        return m_openxrHmd->getPosePosition(OpenXRHMD::Eye::LEFT);
+        return m_openxrHmd->getPoseQuaternion(OpenXRHMD::Eye(idx));
+    }
+
+    Eigen::Vector3f OpenXRRdrMode::getPosition(int idx)
+    {
+        return m_openxrHmd->getPosePosition(OpenXRHMD::Eye(idx));
     }
 
     void OpenXRRdrMode::onGui()

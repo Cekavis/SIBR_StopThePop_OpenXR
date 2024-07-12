@@ -1,3 +1,15 @@
+# Known Issues
+
+- Real-time viewing is laggy, maybe because of acquiring the pose prediction too early. But capturing is not impacted.
+
+# Usage
+
+- Set the resolution of the window (also the capture resolution) to match the rendering resolution using the `--rendering-size` option.
+
+```sh
+SIBR_gaussianViewer_app_d.exe -m /path/to/model --rendering-mode 2 --rendering-size (4128,2208)
+```
+
 # SIBR Core
 
 **SIBR** is a System for Image-Based Rendering.  

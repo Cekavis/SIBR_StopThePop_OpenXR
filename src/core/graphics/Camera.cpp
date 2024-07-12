@@ -18,24 +18,27 @@ namespace sibr
 	ByteStream&		operator << (ByteStream& stream, const Camera& c )
 	{
 		Camera::Transform3f t = c.transform();
+		Camera::Transform3f rt = c.rightTransform();
 		float fovy = c.fovy();
 		float aspect = c.aspect();
 		float znear = c.znear();
 		float zfar = c.zfar();
 		return stream
-			<< t << fovy << aspect << znear << zfar;
+			<< t << rt << fovy << aspect << znear << zfar;
 	}
 
 	ByteStream&		operator >> (ByteStream& stream, Camera& c )
 	{
 		Camera::Transform3f t;
+		Camera::Transform3f rt;
 		float fovy = 0.f;
 		float aspect = 0.f;
 		float znear = 0.f;
 		float zfar = 0.f;
 		stream
-			>> t >> fovy >> aspect >> znear >> zfar;
+			>> t >> rt >> fovy >> aspect >> znear >> zfar;
 		c.transform(t);
+		c.setRightTransform(rt);
 		c.fovy(fovy);
 		c.aspect(aspect);
 		c.znear(znear);

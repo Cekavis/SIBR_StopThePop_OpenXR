@@ -262,6 +262,14 @@ namespace sibr
 		\param debug if true, saving frames
 		*/
 		void				setDebugVideo(const bool debug) { _debugVideoFrames = debug; }
+
+		/** Set original pose
+		 * \param rightTransform the original pose
+		 */
+		void				setRightTransform(const Transform3f& rightTransform) { _rightTransform = rightTransform; }
+
+		/** \return the original pose */
+		const Transform3f&	rightTransform( void ) const { return _rightTransform; }
 		
 	protected:
 
@@ -283,6 +291,8 @@ namespace sibr
 		float			_top; ///< Frustum half height.
 		sibr::Vector2f   _p = {0.5f, 0.5}; ///< Principal point.
 		bool			_isOrtho; ///< Is the camera orthographic.
+
+		Transform3f     _rightTransform; ///< The pose of the right eye.
 	};
 
 	/** Write a camera to a byte stream.

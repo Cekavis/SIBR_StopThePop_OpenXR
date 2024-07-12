@@ -501,7 +501,7 @@ namespace sibr {
 		}
 
 		// Note this call has three modes: record (only read the arg camera) | playback (overwrite the arg camera) | do nothing (do nothing)
-		_cameraRecorder.use(_currentCamera);
+		_cameraRecorder.use(_finalCamera);
 
 		_previousCamera = _currentCamera;
 		_clippingPlanes[0] = _currentCamera.znear();
@@ -509,11 +509,32 @@ namespace sibr {
 	}
 
 	void InteractiveCameraHandler::updateCamera(const IRenderingMode::Ptr & renderingMode) {
+		auto savePath = _finalCamera.savePath();
+		auto debugVideoFrames = _finalCamera.needVideoSave();
+		
 		_finalCamera = _currentCamera;
-		auto q = renderingMode->getRotation();
-		auto pos = renderingMode->getPosition();
-		_finalCamera.rotation(_finalCamera.rotation() * q);
-		_finalCamera.translate(pos, _currentCamera.transform());
+		auto leftTransform = _currentCamera.transform();
+		auto rightTransform = _currentCamera.transform();
+		renderingMode->preparePosePrediction();
+
+		// Calculate left eye camera.
+		auto q = renderingMode->getRotation(0);
+		auto pos = renderingMode->getPosition(0);
+		leftTransform.rotation(_currentCamera.rotation() * q);
+		leftTransform.position(_currentCamera.position());
+		leftTransform.translate(pos, _currentCamera.transform());
+		_finalCamera.transform(leftTransform);
+
+		// Calculate right eye camera.
+		q = renderingMode->getRotation(1);
+		pos = renderingMode->getPosition(1);
+		rightTransform.rotation(_currentCamera.rotation() * q);
+		rightTransform.position(_currentCamera.position());
+		rightTransform.translate(pos, _currentCamera.transform());
+		_finalCamera.setRightTransform(rightTransform);
+
+		_finalCamera.setSavePath(savePath);
+		_finalCamera.setDebugVideo(debugVideoFrames);
 	}
 
 	const sibr::InputCamera& InteractiveCameraHandler::getCamera(void) const {
