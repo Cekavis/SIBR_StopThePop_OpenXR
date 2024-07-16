@@ -89,6 +89,7 @@ namespace sibr
 			if (subview.second.view->active()) {
 
 				subview.second.handler->updateCamera(_renderingMode);
+				subview.second.cam = subview.second.handler->getCamera();
 
 				renderSubView(subview.second);
 

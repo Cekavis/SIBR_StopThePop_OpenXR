@@ -1,6 +1,7 @@
-# Known Issues
+# Notes
 
-- Real-time viewing is laggy, maybe because of acquiring the pose prediction too early. But capturing is not impacted.
+- These modifications may break some other functionalities, especially the interpolation of the camera. Please use no interpolation.
+- The camera and path files are not compatible with the original version.
 
 # Usage
 
