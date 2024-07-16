@@ -509,13 +509,18 @@ namespace sibr {
 	}
 
 	void InteractiveCameraHandler::updateCamera(const IRenderingMode::Ptr & renderingMode) {
+		renderingMode->preparePosePrediction();
+		
+		if (_cameraRecorder.isPlaying()) {
+			return;
+		}
+
 		auto savePath = _finalCamera.savePath();
 		auto debugVideoFrames = _finalCamera.needVideoSave();
 		
 		_finalCamera = _currentCamera;
 		auto leftTransform = _currentCamera.transform();
 		auto rightTransform = _currentCamera.transform();
-		renderingMode->preparePosePrediction();
 
 		// Calculate left eye camera.
 		auto q = renderingMode->getRotation(0);
