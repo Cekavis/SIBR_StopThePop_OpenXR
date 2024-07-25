@@ -11,7 +11,7 @@ set(SIBR_PROJECT "gaussian")
 project(sibr_${SIBR_PROJECT} LANGUAGES CXX)
 
 sibr_gitlibrary(TARGET CudaRasterizer
-    GIT_REPOSITORY 	"https://github.com/r4dl/StopThePop-Rasterization.git"
+    GIT_REPOSITORY 	"https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization.git"
     GIT_TAG			"main"
 )
 
