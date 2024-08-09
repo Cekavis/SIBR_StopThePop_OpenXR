@@ -270,6 +270,14 @@ namespace sibr
 
 		/** \return the original pose */
 		const Transform3f&	rightTransform( void ) const { return _rightTransform; }
+
+		/** Set visibility mask
+		 * \param visibilityMask the visibility mask
+		 */
+		void				setVisibilityMask(std::pair<uint32_t*, uint32_t*> visibilityMask) { _visibilityMask = visibilityMask; }
+
+		/** \return the visibility mask */
+		std::pair<uint32_t*, uint32_t*>	visibilityMask( void ) const { return _visibilityMask; }
 		
 	protected:
 
@@ -293,6 +301,7 @@ namespace sibr
 		bool			_isOrtho; ///< Is the camera orthographic.
 
 		Transform3f     _rightTransform; ///< The pose of the right eye.
+		std::pair<uint32_t*, uint32_t*>	_visibilityMask; ///< Visibility mask.
 	};
 
 	/** Write a camera to a byte stream.

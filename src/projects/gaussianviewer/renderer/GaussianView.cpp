@@ -401,6 +401,9 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&background_cuda, 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&rect_cuda, 2 * P * sizeof(int)));
 
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_cuda, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_sum_cuda, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4));
+
 	float bg[3] = { white_bg ? 1.f : 0.f, white_bg ? 1.f : 0.f, white_bg ? 1.f : 0.f };
 	CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(background_cuda, bg, 3 * sizeof(float), cudaMemcpyHostToDevice));
 
@@ -565,6 +568,10 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
+		CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
+		CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
+
+
 
 		float* image_cuda = nullptr;
 		if (!_interop_failed)
@@ -608,7 +615,9 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			false,
 			image_cuda,
 			nullptr,
-			false
+			false,
+			visibility_mask_cuda,
+			visibility_mask_sum_cuda
 		);
 
 		if (!_interop_failed)
@@ -851,6 +860,9 @@ sibr::GaussianView::~GaussianView()
 	cudaFree(cam_pos_cuda);
 	cudaFree(background_cuda);
 	cudaFree(rect_cuda);
+
+	cudaFree(visibility_mask_cuda);
+	cudaFree(visibility_mask_sum_cuda);
 
 	if (!_interop_failed)
 	{

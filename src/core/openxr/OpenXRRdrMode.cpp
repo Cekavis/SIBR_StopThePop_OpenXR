@@ -59,6 +59,10 @@ namespace sibr
             SIBR_ERR << "Failed to connect to OpenXR" << std::endl;
         }
 
+        // Initialize visibility mask
+        m_visibilityMask[0] = initVisibilityMask(OpenXRHMD::Eye::LEFT);
+        m_visibilityMask[1] = initVisibilityMask(OpenXRHMD::Eye::RIGHT);
+
         SIBR_LOG << "Disable VSync: use headset synchronization." << std::endl;
         window.setVsynced(false);
 
@@ -134,6 +138,8 @@ namespace sibr
                                      // We therefore use the perspective() method with principal point positioning instead
                                      cam.principalPoint(Eigen::Vector2f(1.f, 1.f) - this->m_openxrHmd->getScreenCenter(eye));
                                      cam.perspective(cam.fovy(), (float)w / (float)h, cam.znear(), cam.zfar());
+
+                                     cam.setVisibilityMask(m_visibilityMask[viewIndex]);
 
                                      // Get the render target holding the swapchain image's texture from the pool
                                      auto rt = getRenderTarget(texture, w, h);
@@ -266,6 +272,96 @@ namespace sibr
             }
         }
         return SwapchainImageRenderTarget::Ptr();
+    }
+
+    bool pointInPolygon(const XrVector2f *p, const int n, const float x, const float y)
+    {
+        bool c = false;
+        for (int i = 0, j = n - 1; i < n; j = i++)
+        {
+            if (((p[j].y < y) != (p[i].y < y)) && (((p[i].x - x) * (p[j].y - y) > (p[j].x - x) * (p[i].y - y)) ^ (p[j].y >= y)))
+                c = !c;
+        }
+        return c;
+    }
+
+    std::pair<uint32_t*, uint32_t*> OpenXRRdrMode::initVisibilityMask(OpenXRHMD::Eye eye)
+    {
+        // Get visibility mask
+        XrVisibilityMaskKHR visibilityMask;
+        m_openxrHmd->getVisibilityMask(eye, visibilityMask);
+
+        auto fov = m_openxrHmd->getFieldOfView(eye);
+        float xmin = tan(fov.x());
+        float xmax = tan(fov.y());
+        float ymin = tan(fov.z());
+        float ymax = tan(fov.w());
+
+        auto vertices = visibilityMask.vertices;
+        for (int i = 0; i < visibilityMask.vertexCountOutput; i++)
+        {
+            vertices[i].x = (vertices[i].x - xmin) / (xmax - xmin);
+            vertices[i].y = (vertices[i].y - ymin) / (ymax - ymin);
+        }
+        vertices[visibilityMask.vertexCountOutput] = vertices[0];
+
+        const int w = m_openxrHmd->getResolution().x();
+        const int h = m_openxrHmd->getResolution().y();
+
+        const int tileW = (w + 15) / 16;
+        const int tileH = (h + 15) / 16;
+        uint32_t* mask = (uint32_t*) malloc((tileW * tileH + 31) / 32 * 4);
+        memset(mask, 0, (tileW * tileH + 31) / 32 * 4);
+        uint32_t* mask_sum = (uint32_t*) malloc((tileW + 1) * (tileH + 1) * 4);
+        memset(mask_sum, 0, (tileW + 1) * (tileH + 1) * 4);
+
+        for (int i = 0; i < tileW; i++) for (int j = 0; j < tileH; j++)
+        {
+            int idx = i * tileH + j;
+            float x = (i * 16 + 0.5f) / w;
+            float y = (j * 16 + 0.5f) / h;
+            bool in = pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y) | 
+                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + 15.f / w, y) | 
+                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y + 15.f / h) | 
+                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + 15.f / w, y + 15.f / h);
+
+            mask[idx / 32] |= in << (idx % 32);
+        }
+
+        for (int i = 1; i <= tileW; i++) for (int j = 1; j <= tileH; j++)
+        {
+            int idx = (i - 1) * tileH + j - 1;
+            mask_sum[i * (tileH + 1) + j] = mask[idx / 32] >> (idx % 32) & 1;
+        }
+
+        for (int i = 1; i <= tileW; i++) for (int j = 1; j <= tileH; j++)
+        {
+            mask_sum[i * (tileH + 1) + j] += mask_sum[(i - 1) * (tileH + 1) + j];
+        }
+
+        for (int i = 1; i <= tileW; i++) for (int j = 1; j <= tileH; j++)
+        {
+            mask_sum[i * (tileH + 1) + j] += mask_sum[i * (tileH + 1) + j - 1];
+        }
+
+        for (int j = tileH - 1; j >= 0; j--)
+        {
+            for (int i = 0; i < tileW; i++)
+            {
+                int idx = i * tileH + j;
+                if (mask[idx / 32] & (1 << (idx % 32)))
+                {
+                    printf("X");
+                }
+                else
+                {
+                    printf(".");
+                }
+            }
+            printf("\n");
+        }
+
+        return std::make_pair(mask, mask_sum);
     }
 
 } /*namespace sibr*/

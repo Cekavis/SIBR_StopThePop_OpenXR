@@ -287,6 +287,11 @@ namespace sibr
             return m_runtimeVersion;
         }
 
+        /**
+         * @brief Return the visilibity mask of each eye
+         */
+        void getVisibilityMask(Eye eye, XrVisibilityMaskKHR &visibilityMask) const;
+
     private:
         // Name of the application displayed in the headset
         std::string m_applicationName;

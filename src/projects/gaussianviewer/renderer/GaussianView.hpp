@@ -138,6 +138,8 @@ namespace sibr {
 		float* proj_inv_cuda;
 		float* cam_pos_cuda;
 		float* background_cuda;
+		uint32_t* visibility_mask_cuda;
+		uint32_t* visibility_mask_sum_cuda;
 
 		float _scalingModifier = 1.0f;
 		GaussianData* gData;

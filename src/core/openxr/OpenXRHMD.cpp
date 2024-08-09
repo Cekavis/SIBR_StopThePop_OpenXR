@@ -255,6 +255,7 @@ namespace sibr
         }
 
         std::vector<const char *> expectedExtensions = {
+            XR_KHR_VISIBILITY_MASK_EXTENSION_NAME,
             XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
 #if defined(XR_USE_PLATFORM_WIN32)
             XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME,
@@ -1045,6 +1046,45 @@ namespace sibr
         default:
             return "UNKNOWN";
         }
+    }
+
+    void OpenXRHMD::getVisibilityMask(Eye eye, XrVisibilityMaskKHR &visibilityMask) const
+    {
+        uint32_t viewIndex = eyeToViewIndex(eye);
+        if (viewIndex >= m_viewCount)
+        {
+            fprintf(stderr, "View for %s eye does not exist\n", eyeToString(eye));
+            return;
+        }
+
+        PFN_xrGetVisibilityMaskKHR xrGetVisibilityMaskKHR = nullptr;
+        XrResult result = xrGetInstanceProcAddr(m_instance, "xrGetVisibilityMaskKHR", (PFN_xrVoidFunction *)&xrGetVisibilityMaskKHR);
+        if (!xrCheck(m_instance, result, "Failed to get xrGetVisibilityMaskKHR function pointer"))
+            return;
+
+        visibilityMask.type = XR_TYPE_VISIBILITY_MASK_KHR;
+        visibilityMask.next = NULL;
+        visibilityMask.vertexCapacityInput = 0;
+        visibilityMask.indexCapacityInput = 0;
+        result = xrGetVisibilityMaskKHR(m_session, m_viewType, viewIndex, XrVisibilityMaskTypeKHR::XR_VISIBILITY_MASK_TYPE_LINE_LOOP_KHR, &visibilityMask);
+        if (!xrCheck(m_instance, result, "Failed to get visibility mask 1"))
+            return;
+
+        if (visibilityMask.vertexCountOutput == 0)
+        {
+            // Visibility mask is not supported
+            return;
+        }
+
+        // Two-call idiom
+        visibilityMask.vertices = (XrVector2f *)malloc(sizeof(XrVector2f) * (visibilityMask.vertexCountOutput + 1));
+        visibilityMask.indices = (uint32_t *)malloc(sizeof(uint32_t) * visibilityMask.indexCountOutput);
+        visibilityMask.vertexCapacityInput = visibilityMask.vertexCountOutput + 1;
+        visibilityMask.indexCapacityInput = visibilityMask.indexCountOutput;
+        printf("vertexCountOutput: %d\n", visibilityMask.vertexCountOutput);
+        result = xrGetVisibilityMaskKHR(m_session, m_viewType, viewIndex, XrVisibilityMaskTypeKHR::XR_VISIBILITY_MASK_TYPE_LINE_LOOP_KHR, &visibilityMask);
+        if (!xrCheck(m_instance, result, "Failed to get visibility mask 2"))
+            return;
     }
 
 } /*namespace sibr*/
