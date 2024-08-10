@@ -100,44 +100,36 @@ namespace sibr
         // The callback is called for each single view (left view then right view) with the texture to render to
         m_openxrHmd->submitFrame([this, w, h, &view, &camera, optDest](int viewIndex, uint32_t texture)
                                  {
-                                     OpenXRHMD::Eye eye = viewIndex == 0 ? OpenXRHMD::Eye::LEFT : OpenXRHMD::Eye::RIGHT;
+                                    OpenXRHMD::Eye eye = viewIndex == 0 ? OpenXRHMD::Eye::LEFT : OpenXRHMD::Eye::RIGHT;
 
-                                     auto fov = this->m_openxrHmd->getFieldOfView(eye);
-                                     // OpenXR eye position is in world coordinates system (+x: right, +y: up; +z: backward)
-                                     // 3DGS reference scenes have the following coordinate system : +x: right, +y: down, +z: forward
-                                     // Let's rotate the camera to have the right-side up scene
-                                     /* if (m_flipY)
-                                     {
-                                         Eigen::Matrix3f mat;
-                                         mat << 1.0f, 0.0f, 0.0f,
-                                             0.0f, -1.0f, 0.0f,
-                                             0.0f, 0.0f, -1.0f;
-                                         Eigen::Matrix3f rot = mat * q.matrix();
-                                         q = Eigen::Quaternionf(rot);
-                                         pos = mat * pos;
-                                     } */
+                                    // fov has wrong aspect ratio, need to scale fov.x and fov.y
+                                    auto fov = this->m_openxrHmd->getFieldOfView(eye);
+                                    float aspect = (float) w / h;
+                                    float scaley = tan(fov.w()) - tan(fov.z());
+                                    float scalex = tan(fov.y()) - tan(fov.x());
+                                    float correct_scalex = scaley * aspect;
+                                    fov.x() = atan(tan(fov.x()) / scalex * correct_scalex);
+                                    fov.y() = atan(tan(fov.y()) / scalex * correct_scalex);
 
                                     auto q = viewIndex == 0 ? camera.rotation() : camera.rightTransform().rotation();
                                     auto pos = viewIndex == 0 ? camera.position() : camera.rightTransform().position();
 
-                                     // Define camera from OpenXR eye view position/orientation/fov
-                                     Camera cam;
-                                     cam.rotate(q);
-                                     cam.position(pos);
-                                     cam.zfar(camera.zfar());
-                                     cam.znear(camera.znear());
-                                     cam.fovy(fov.w() - fov.z());
-                                     cam.aspect((fov.y() - fov.x()) / (fov.w() - fov.z()));
+                                    // Define camera from OpenXR eye view position/orientation/fov
+                                    Camera cam;
+                                    cam.rotate(q);
+                                    cam.position(pos);
+                                    cam.zfar(camera.zfar());
+                                    cam.znear(camera.znear());
 
-                                    //  if (m_vrExperience == 1) { // 1: seated experience - used sibr_viewer current camera's position as default position
-                                    //      cam.translate(camera.position());
-                                    //  }
+                                    // all fov values are needed to calculate a correct perspective matrix
+                                    cam.setAllFov(fov);
 
                                      // Note: setStereoCam() used in SteroAnaglyph canno be reused here,
                                      // because headset eye views have asymetric fov
                                      // We therefore use the perspective() method with principal point positioning instead
                                      cam.principalPoint(Eigen::Vector2f(1.f, 1.f) - this->m_openxrHmd->getScreenCenter(eye));
-                                     cam.perspective(cam.fovy(), (float)w / (float)h, cam.znear(), cam.zfar());
+                                     cam.perspective(fov.w() - fov.z(), aspect, cam.znear(), cam.zfar());
+
 
                                      cam.setVisibilityMask(m_visibilityMask[viewIndex]);
 

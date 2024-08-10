@@ -14,6 +14,8 @@
 #include <thread>
 #include <boost/asio.hpp>
 #include <imgui_internal.h>
+#include <npp.h>
+#include <nppi.h>
 
 // Define the types and sizes that make up the contents of each Gaussian 
 // in the trained model.
@@ -403,6 +405,9 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_cuda, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_sum_cuda, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[0], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[1], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
+	
 
 	float bg[3] = { white_bg ? 1.f : 0.f, white_bg ? 1.f : 0.f, white_bg ? 1.f : 0.f };
 	CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(background_cuda, bg, 3 * sizeof(float), cudaMemcpyHostToDevice));
@@ -550,28 +555,62 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 	}
 	else
 	{
-		// Convert view and projection to target coordinate system
-		auto view_mat = eye.view();
-		auto proj_mat = eye.viewproj();
-		view_mat.row(1) *= -1;
-		view_mat.row(2) *= -1;
-		proj_mat.row(1) *= -1;
+		auto forward = [&](const sibr::Camera& eye, float* image_cuda_curr, int x, int y) {
+			// Convert view and projection to target coordinate system
+			auto view_mat = eye.view();
+			auto proj_mat = eye.viewproj();
+			view_mat.row(1) *= -1;
+			view_mat.row(2) *= -1;
+			proj_mat.row(1) *= -1;
 
-		// Compute additional view parameters
-		float tan_fovy = tan(eye.fovy() * 0.5f);
-		float tan_fovx = tan_fovy * eye.aspect();
+			// Compute additional view parameters
+			float tan_fovy = tan(eye.fovy() * 0.5f);
+			float tan_fovx = tan_fovy * eye.aspect();
 
-		auto proj_inv_mat = sibr::Matrix4f(proj_mat.inverse());
+			auto proj_inv_mat = sibr::Matrix4f(proj_mat.inverse());
 
-		// Copy frame-dependent data to GPU
-		CUDA_SAFE_CALL(cudaMemcpy(view_cuda, view_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
+			// Copy frame-dependent data to GPU
+			CUDA_SAFE_CALL(cudaMemcpy(view_cuda, view_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
+			CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
+			CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
+			CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
+			// CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
+			// CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
 
-
+			// Rasterize
+			float* boxmin = _cropping ? (float*)&_boxmin : nullptr;
+			float* boxmax = _cropping ? (float*)&_boxmax : nullptr;
+			CudaRasterizer::Rasterizer::forward(
+				geomBufferFunc,
+				binningBufferFunc,
+				imgBufferFunc,
+				count, _sh_degree, 16,
+				background_cuda,
+				x, y,
+				splatting_settings,
+				debugMode,
+				pos_cuda,
+				shs_cuda,
+				nullptr,
+				opacity_cuda,
+				scale_cuda,
+				_scalingModifier,
+				rot_cuda,
+				nullptr,
+				view_cuda,
+				proj_cuda,
+				proj_inv_cuda,
+				cam_pos_cuda,
+				tan_fovx,
+				tan_fovy,
+				false,
+				image_cuda_curr,
+				nullptr,
+				false,
+				nullptr,
+				nullptr
+			);
+		};
 
 		float* image_cuda = nullptr;
 		if (!_interop_failed)
@@ -586,39 +625,109 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			image_cuda = fallbackBufferCuda;
 		}
 
-		// Rasterize
-		float* boxmin = _cropping ? (float*)&_boxmin : nullptr;
-		float* boxmax = _cropping ? (float*)&_boxmax : nullptr;
-		CudaRasterizer::Rasterizer::forward(
-			geomBufferFunc,
-			binningBufferFunc,
-			imgBufferFunc,
-			count, _sh_degree, 16,
-			background_cuda,
-			_resolution.x(), _resolution.y(),
-			splatting_settings,
-			debugMode,
-			pos_cuda,
-			shs_cuda,
-			nullptr,
-			opacity_cuda,
-			scale_cuda,
-			_scalingModifier,
-			rot_cuda,
-			nullptr,
-			view_cuda,
-			proj_cuda,
-			proj_inv_cuda,
-			cam_pos_cuda,
-			tan_fovx,
-			tan_fovy,
-			false,
-			image_cuda,
-			nullptr,
-			false,
-			visibility_mask_cuda,
-			visibility_mask_sum_cuda
-		);
+		int w = _resolution.x();
+		int h = _resolution.y();
+
+		static CudaRasterizer::Timer timer({ "Low", "High", "Upsample", "Move" });
+
+		timer.setActive(true);
+		timer();
+		forward(eye, image_cuda_hier[0], w / 2, h / 2);
+		timer();
+		auto fov = eye.allFov();
+		Camera eye2 = eye;
+		eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
+		// eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
+		// eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
+		// fov = eye2.allFov();
+		forward(eye2, image_cuda_hier[1], _resolution.x() / 2, _resolution.y() / 2);
+		timer();
+
+
+		// Upsample
+		{
+			NppiSize srcSize = { w / 2, h / 2 };
+			const float* pSrc[] = {
+				image_cuda_hier[0],
+				image_cuda_hier[0] + srcSize.width * srcSize.height,
+				image_cuda_hier[0] + 2 * srcSize.width * srcSize.height
+			};
+			int srcStep = srcSize.width * sizeof(float);
+			NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
+			NppiSize dstSize = { w, h };
+			float* pDst[] = {
+				image_cuda,
+				image_cuda + w * h,
+				image_cuda + 2 * w * h
+			};
+			int dstStep = w * sizeof(float);
+			NppiRect dstRect = { 0, 0, w / 2 * 2, h / 2 * 2 };
+			auto status = nppiResize_32f_P3R(
+				pSrc, srcStep, srcSize, srcRect,
+				pDst, dstStep, dstSize, dstRect,
+				NPPI_INTER_CUBIC
+				// NPPI_INTER_LANCZOS
+			);
+			if (status != NPP_SUCCESS)
+			{
+				SIBR_ERR << "NPP error: " << status << std::endl;
+			}
+		}
+		timer();
+
+		// Move high-res image
+		{
+			CudaRasterizer::blend(
+				image_cuda_hier[1],
+				w / 2, h / 2,
+				image_cuda,
+				w, h,
+				w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2,
+				h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2,
+				0.5f
+			);
+			// NppiSize srcSize = { w / 2, h / 2 };
+			// const float* pSrc[] = {
+			// 	image_cuda_hier[1],
+			// 	image_cuda_hier[1] + srcSize.width * srcSize.height,
+			// 	image_cuda_hier[1] + 2 * srcSize.width * srcSize.height
+			// };
+			// int srcStep = srcSize.width * sizeof(float);
+			// NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
+			// NppiSize dstSize = { w, h };
+			// float* pDst[] = {
+			// 	image_cuda,
+			// 	image_cuda + w * h,
+			// 	image_cuda + 2 * w * h
+			// };
+			// int dstStep = w * sizeof(float);
+			// int cx = w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2;
+			// int cy = h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2;
+			// NppiRect dstRect = { cx, cy, w / 2, h / 2 };
+			// auto status = nppiResize_32f_P3R(
+			// 	pSrc, srcStep, srcSize, srcRect,
+			// 	pDst, dstStep, dstSize, dstRect,
+			// 	NPPI_INTER_NN
+			// );
+			// if (status != NPP_SUCCESS)
+			// {
+			// 	SIBR_ERR << "NPP error: " << status << std::endl;
+			// }
+		}
+
+		timer();
+		
+		std::vector<std::pair<std::string, float>> timings;
+		timer.syncAddReport(timings);
+
+		if (timings.size() > 0)
+		{
+			std::stringstream ss;
+			ss << "Timings: \n";
+			for (auto const& x : timings)
+				ss << " - " << x.first << ": " << x.second << "ms\n";
+			std::cout << ss.str() << std::endl;
+		}
 
 		if (!_interop_failed)
 		{
@@ -863,6 +972,8 @@ sibr::GaussianView::~GaussianView()
 
 	cudaFree(visibility_mask_cuda);
 	cudaFree(visibility_mask_sum_cuda);
+	for (int i = 0; i < 2; i++)
+		cudaFree(image_cuda_hier[i]);
 
 	if (!_interop_failed)
 	{

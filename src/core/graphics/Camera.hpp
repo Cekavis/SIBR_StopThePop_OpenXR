@@ -278,6 +278,14 @@ namespace sibr
 
 		/** \return the visibility mask */
 		std::pair<uint32_t*, uint32_t*>	visibilityMask( void ) const { return _visibilityMask; }
+
+		/** Set all field of view
+		 * \param all_fov the field of view
+		 */
+		void				setAllFov(const Eigen::Vector4f& all_fov) { _all_fov = all_fov; _dirtyViewProj; }
+
+		/** \return the field of view */
+		const Eigen::Vector4f&	allFov( void ) const { return _all_fov; }
 		
 	protected:
 
@@ -302,6 +310,7 @@ namespace sibr
 
 		Transform3f     _rightTransform; ///< The pose of the right eye.
 		std::pair<uint32_t*, uint32_t*>	_visibilityMask; ///< Visibility mask.
+		Eigen::Vector4f _all_fov; ///< All the field of view
 	};
 
 	/** Write a camera to a byte stream.

@@ -44,6 +44,8 @@ target_link_libraries(${PROJECT_NAME}
 	sibr_basic
 	CUDA::cudart
 	CudaRasterizer
+	nppc
+	nppig
 )
 else()
 target_link_libraries(${PROJECT_NAME}

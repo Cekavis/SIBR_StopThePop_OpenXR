@@ -28,6 +28,7 @@
 
 #include <stopthepop/rasterizer_debug.h>
 #include <rasterizer.h>
+#include <rasterizer_impl.h>
 
 namespace CudaRasterizer
 {
@@ -140,6 +141,7 @@ namespace sibr {
 		float* background_cuda;
 		uint32_t* visibility_mask_cuda;
 		uint32_t* visibility_mask_sum_cuda;
+		float* image_cuda_hier[2];
 
 		float _scalingModifier = 1.0f;
 		GaussianData* gData;
