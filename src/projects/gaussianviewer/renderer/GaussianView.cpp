@@ -555,7 +555,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 	}
 	else
 	{
-		auto forward = [&](const sibr::Camera& eye, float* image_cuda_curr, int x, int y) {
+		auto forward = [&](const sibr::Camera& eye, float* image_cuda_curr, int x, int y, bool mask = false) {
 			// Convert view and projection to target coordinate system
 			auto view_mat = eye.view();
 			auto proj_mat = eye.viewproj();
@@ -574,8 +574,16 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
-			// CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
-			// CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
+			if (mask)
+			{
+				// auto start = std::chrono::steady_clock::now();
+				CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
+				CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
+				// cudaDeviceSynchronize();
+				// auto end = std::chrono::steady_clock::now();
+				// double elapsed_seconds = std::chrono::duration<double>(end - start).count();
+				// SIBR_LOG << "Mask transfer time: " << elapsed_seconds * 1000 << std::endl;
+			}
 
 			// Rasterize
 			float* boxmin = _cropping ? (float*)&_boxmin : nullptr;
@@ -607,8 +615,8 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				image_cuda_curr,
 				nullptr,
 				false,
-				nullptr,
-				nullptr
+				mask ? visibility_mask_cuda : nullptr,
+				mask ? visibility_mask_sum_cuda : nullptr
 			);
 		};
 
@@ -628,19 +636,25 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		int w = _resolution.x();
 		int h = _resolution.y();
 
-		static CudaRasterizer::Timer timer({ "Low", "High", "Upsample", "Move" });
+		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 500);
 
 		timer.setActive(true);
 		timer();
-		forward(eye, image_cuda_hier[0], w / 2, h / 2);
+
+		// Low-res
+		forward(eye, image_cuda_hier[0], w / 2, h / 2, true);
+
 		timer();
+
+		// High-res
 		auto fov = eye.allFov();
 		Camera eye2 = eye;
 		eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
 		// eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
 		// eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
 		// fov = eye2.allFov();
-		forward(eye2, image_cuda_hier[1], _resolution.x() / 2, _resolution.y() / 2);
+		forward(eye2, image_cuda_hier[1], w / 2, h / 2);
+
 		timer();
 
 
@@ -673,7 +687,6 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				SIBR_ERR << "NPP error: " << status << std::endl;
 			}
 		}
-		timer();
 
 		// Move high-res image
 		{
@@ -684,7 +697,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				w, h,
 				w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2,
 				h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2,
-				0.5f
+				0.1f
 			);
 			// NppiSize srcSize = { w / 2, h / 2 };
 			// const float* pSrc[] = {
@@ -725,9 +738,37 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			std::stringstream ss;
 			ss << "Timings: \n";
 			for (auto const& x : timings)
-				ss << " - " << x.first << ": " << x.second << "ms\n";
+				ss << " - " << x.first << ": " << x.second * 2 << "ms\n";
 			std::cout << ss.str() << std::endl;
 		}
+
+		// static int frame_counter = 0;
+		// if (++frame_counter % 2000 == 1999)
+		// {
+		// 	float *img = new float[w * h * 3], *img2 = new float[w * h * 3];
+		// 	CUDA_SAFE_CALL(cudaMemcpy(img, image_cuda, w * h * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+		// 	for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) for (int k = 0; k < 3; k++)
+		// 		img2[j * w * 3 + i * 3 + k] = img[(2 - k) * w * h + j * w + i] * 255;
+		// 	std::string filename = "stop-optimal-fr.png";
+		// 	cv::imwrite(filename, cv::Mat(h, w, CV_32FC3, img2));
+
+		// 	w /= 2, h /= 2;
+		// 	CUDA_SAFE_CALL(cudaMemcpy(img, image_cuda_hier[0], w * h * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+		// 	for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) for (int k = 0; k < 3; k++)
+		// 		img2[j * w * 3 + i * 3 + k] = img[(2 - k) * w * h + j * w + i] * 255;
+		// 	filename = "stop-optimal-fr-low.png";
+		// 	cv::imwrite(filename, cv::Mat(h, w, CV_32FC3, img2));
+
+		// 	CUDA_SAFE_CALL(cudaMemcpy(img, image_cuda_hier[1], w * h * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+		// 	for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) for (int k = 0; k < 3; k++)
+		// 		img2[j * w * 3 + i * 3 + k] = img[(2 - k) * w * h + j * w + i] * 255;
+		// 	filename = "stop-optimal-fr-high.png";
+		// 	cv::imwrite(filename, cv::Mat(h, w, CV_32FC3, img2));
+
+		// 	delete[] img;
+		// 	delete[] img2;
+		// 	printf("success\n");
+		// }
 
 		if (!_interop_failed)
 		{

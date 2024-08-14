@@ -144,7 +144,22 @@ namespace sibr
                                      rt->clear();
                                      rt->bind();
                                      glViewport(0, 0, w, h);
+
+                                     auto start = std::chrono::steady_clock::now();
                                      view.onRenderIBR(*rt.get(), cam);
+                                     auto end = std::chrono::steady_clock::now();
+                                     double elapsed_seconds = std::chrono::duration<double>(end - start).count();
+                                     static double avg = 0;
+                                     static int frame_count = 0;
+                                     avg += elapsed_seconds;
+                                     ++frame_count;
+                                     if (frame_count == 500)
+                                     {
+                                         SIBR_LOG << "Rendering time: " << avg * 2 / frame_count * 1000 << "ms" << std::endl;
+                                         avg = 0;
+                                         frame_count = 0;
+                                     }
+
                                      rt->unbind();
 
                                      // Draw the left and right textures into the UI window
@@ -289,35 +304,56 @@ namespace sibr
         float ymin = tan(fov.z());
         float ymax = tan(fov.w());
 
-        auto vertices = visibilityMask.vertices;
-        for (int i = 0; i < visibilityMask.vertexCountOutput; i++)
-        {
-            vertices[i].x = (vertices[i].x - xmin) / (xmax - xmin);
-            vertices[i].y = (vertices[i].y - ymin) / (ymax - ymin);
-        }
-        vertices[visibilityMask.vertexCountOutput] = vertices[0];
-
         const int w = m_openxrHmd->getResolution().x();
         const int h = m_openxrHmd->getResolution().y();
 
-        const int tileW = (w + 15) / 16;
-        const int tileH = (h + 15) / 16;
+        const int tileSize = 32;
+
+        const int tileW = (w + tileSize - 1) / tileSize;
+        const int tileH = (h + tileSize - 1) / tileSize;
         uint32_t* mask = (uint32_t*) malloc((tileW * tileH + 31) / 32 * 4);
-        memset(mask, 0, (tileW * tileH + 31) / 32 * 4);
+        memset(mask, -1, (tileW * tileH + 31) / 32 * 4);
         uint32_t* mask_sum = (uint32_t*) malloc((tileW + 1) * (tileH + 1) * 4);
         memset(mask_sum, 0, (tileW + 1) * (tileH + 1) * 4);
 
+        if (visibilityMask.vertexCountOutput > 0)
+        {
+            auto vertices = visibilityMask.vertices;
+            for (int i = 0; i < visibilityMask.vertexCountOutput; i++)
+            {
+                vertices[i].x = (vertices[i].x - xmin) / (xmax - xmin);
+                vertices[i].y = (vertices[i].y - ymin) / (ymax - ymin);
+            }
+            vertices[visibilityMask.vertexCountOutput] = vertices[0];
+
+            for (int i = 0; i < tileW; i++) for (int j = 0; j < tileH; j++)
+            {
+                int idx = i * tileH + j;
+                float x = (i * tileSize + 0.5f) / w;
+                float y = (j * tileSize + 0.5f) / h;
+                bool in = pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y) | 
+                          pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + (tileSize - 1.0f) / w, y) | 
+                          pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y + (tileSize - 1.0f) / h) | 
+                          pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + (tileSize - 1.0f) / w, y + (tileSize - 1.0f) / h);
+
+                if (!in) mask[idx / 32] &= ~(1u << (idx % 32));
+            }
+        }
+
+        // Mask central part
+		int cx = w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2;
+        int cy = h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2;
+        float ratio = 0.1;
         for (int i = 0; i < tileW; i++) for (int j = 0; j < tileH; j++)
         {
             int idx = i * tileH + j;
-            float x = (i * 16 + 0.5f) / w;
-            float y = (j * 16 + 0.5f) / h;
-            bool in = pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y) | 
-                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + 15.f / w, y) | 
-                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x, y + 15.f / h) | 
-                      pointInPolygon(vertices, visibilityMask.vertexCountOutput, x + 15.f / w, y + 15.f / h);
-
-            mask[idx / 32] |= in << (idx % 32);
+            int x = i * tileSize;
+            int y = j * tileSize;
+            bool in = x < cx + w * ratio / 2 ||
+                      x + tileSize > cx + w / 2 - w * ratio / 2 ||
+                      y < cy + h * ratio / 2 ||
+                      y + tileSize > cy + h / 2 - h * ratio / 2;
+            if (!in) mask[idx / 32] &= ~(1u << (idx % 32));
         }
 
         for (int i = 1; i <= tileW; i++) for (int j = 1; j <= tileH; j++)
