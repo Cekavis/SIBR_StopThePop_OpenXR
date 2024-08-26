@@ -28,7 +28,12 @@ file(GLOB SOURCES "*.cpp" "*.h" "*.hpp" "shaders/*.frag" "shaders/*.vert" "shade
 ## Specify target rules
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
-include_directories(${Boost_INCLUDE_DIRS} .)
+include_directories(
+	${Boost_INCLUDE_DIRS}
+	$ENV{NVTX_INCLUDE_DIR}
+	.
+)
+message(STATUS "NVTX_INCLUDE_DIR: $ENV{NVTX_INCLUDE_DIR}")
 if (WIN32)
 target_link_libraries(${PROJECT_NAME}
 	${Boost_LIBRARIES}

@@ -16,7 +16,7 @@ source_group("Source Files" FILES ${SOURCES})
 ## Specify target rules
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${OpenXR_INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} PUBLIC ${OpenXR_INCLUDE_DIR} $ENV{NVTX_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME}
     OpenXR::openxr_loader
     sibr_view
