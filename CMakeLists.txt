@@ -211,3 +211,8 @@ ADD_SUBDIRECTORY(src)
 if (WIN32)
 ADD_SUBDIRECTORY(docs)
 endif()
+
+
+target_compile_options(CudaRasterizer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --generate-line-info
+                       >)
