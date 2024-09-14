@@ -1,11 +1,19 @@
-# Notes
+## Notes
 
-- These modifications may break some other functionalities, especially the interpolation of the camera. Please use no interpolation.
+This project depends on the `main` branch of [this rasterizer](https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization). It's downloaded during configuring.
+
+### Optimal Projection
+
+The introduction of optimal projection broke tile-based culling. The `tile-based-culling` branch fixes the issue but its performance is worse. So only hierarchical culling is used by default.
+
+### Video recording feature
+
+- These modifications may break some other functionalities, especially the interpolation of the camera. No interpolation or default interpolation are the same, and should work properly.
 - The camera and path files are not compatible with the original version.
 
-# Usage
+#### Usage
 
-- Set the resolution of the window (also the capture resolution) to match the rendering resolution using the `--rendering-size` option.
+Set the resolution of the window (also the capture resolution) to match the rendering resolution using the `--rendering-size` option.
 
 ```sh
 SIBR_gaussianViewer_app_d.exe -m /path/to/model --rendering-mode 2 --rendering-size (4128,2208)
