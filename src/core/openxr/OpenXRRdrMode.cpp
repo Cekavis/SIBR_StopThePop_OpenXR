@@ -102,14 +102,10 @@ namespace sibr
                                  {
                                     OpenXRHMD::Eye eye = viewIndex == 0 ? OpenXRHMD::Eye::LEFT : OpenXRHMD::Eye::RIGHT;
 
-                                    // fov has wrong aspect ratio, need to scale fov.x and fov.y
                                     auto fov = this->m_openxrHmd->getFieldOfView(eye);
-                                    float aspect = (float) w / h;
                                     float scaley = tan(fov.w()) - tan(fov.z());
                                     float scalex = tan(fov.y()) - tan(fov.x());
-                                    float correct_scalex = scaley * aspect;
-                                    fov.x() = atan(tan(fov.x()) / scalex * correct_scalex);
-                                    fov.y() = atan(tan(fov.y()) / scalex * correct_scalex);
+                                    float aspect = scalex / scaley;
 
                                     auto q = viewIndex == 0 ? camera.rotation() : camera.rightTransform().rotation();
                                     auto pos = viewIndex == 0 ? camera.position() : camera.rightTransform().position();
