@@ -35,8 +35,8 @@ namespace sibr
 	Matrix4f perspectiveOffCenter(
 			float left, float right, float bottom, float top, float mynear, float myfar )
 	{      
-		float x =  (2.0f * mynear) / (right - left);
-		float y =  (2.0f * mynear) / (top - bottom);
+		float x =  (2.0f) / (right - left);
+		float y =  (2.0f) / (top - bottom);
 		float a =  (right + left) / (right - left);
 
 		float b =  (top + bottom) / (top - bottom);
@@ -51,6 +51,8 @@ namespace sibr
 			0, y, 0, 0,
 			a, b, c, e,
 			0, 0, d, 0;
+
+		m.transposeInPlace();
 
 		return m;
 	}

@@ -651,7 +651,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		Camera eye2 = eye;
 		// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
 		eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
-		// eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
+		eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
 		// fov = eye2.allFov();
 		forward(eye2, image_cuda_hier[1], w / 2, h / 2);
 
@@ -695,8 +695,8 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				w / 2, h / 2,
 				image_cuda,
 				w, h,
-				w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2,
-				h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2,
+				w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2 + 0.5,
+				h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2 + 0.5,
 				0.1f
 			);
 			// NppiSize srcSize = { w / 2, h / 2 };
