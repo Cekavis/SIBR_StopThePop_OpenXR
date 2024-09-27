@@ -116,7 +116,8 @@ namespace sibr
 		if (ortho())
 			return sibr::orthographic(_right, _top, _znear, _zfar);
 		else
-			return sibr::perspective(_fov, _aspect, _znear, _zfar, _p);
+			// return sibr::perspective(_fov, _aspect, _znear, _zfar, _p);
+			return sibr::perspectiveOffCenter(tan(_all_fov.x()), tan(_all_fov.y()), tan(_all_fov.z()), tan(_all_fov.w()), _znear, _zfar);
 	}
 
 	/*static*/ Camera	Camera::interpolate( const Camera& from, const Camera& to, float dist01 )

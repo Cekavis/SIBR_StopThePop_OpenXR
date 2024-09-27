@@ -282,7 +282,7 @@ namespace sibr
 		/** Set all field of view
 		 * \param all_fov the field of view
 		 */
-		void				setAllFov(const Eigen::Vector4f& all_fov) { _all_fov = all_fov; _dirtyViewProj; }
+		void				setAllFov(const Eigen::Vector4f& all_fov) { _all_fov = all_fov; _dirtyViewProj = true; }
 
 		/** \return the field of view */
 		const Eigen::Vector4f&	allFov( void ) const { return _all_fov; }
