@@ -117,10 +117,9 @@ namespace sibr
     bool getRuntimeNameAndVersion(XrInstance instance, std::string &name, std::string &version)
     {
         XrResult result;
-        XrInstanceProperties instance_props = {
-            .type = XR_TYPE_INSTANCE_PROPERTIES,
-            .next = NULL,
-        };
+        XrInstanceProperties instance_props;
+        instance_props.type = XR_TYPE_INSTANCE_PROPERTIES;
+        instance_props.next = NULL;
 
         result = xrGetInstanceProperties(instance, &instance_props);
         if (!xrCheck(NULL, result, "Failed to get instance info"))
@@ -138,10 +137,9 @@ namespace sibr
     void printSystemProperties(XrInstance instance, XrSystemId systemId)
     {
         XrResult result;
-        XrSystemProperties system_props = {
-            .type = XR_TYPE_SYSTEM_PROPERTIES,
-            .next = NULL,
-        };
+        XrSystemProperties system_props;
+        system_props.type = XR_TYPE_SYSTEM_PROPERTIES;
+        system_props.next = NULL;
 
         result = xrGetSystemProperties(instance, systemId, &system_props);
         if (!xrCheck(instance, result, "Failed to get System properties"))

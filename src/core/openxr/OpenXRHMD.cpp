@@ -55,9 +55,14 @@ namespace sibr
         return true;
     }
 
+    static XrPosef createIdentityPose() {
+        XrPosef pose;
+        pose.orientation = XrQuaternionf{ 0, 0, 0, 1.0 };
+        pose.position = XrVector3f{ 0.f, 0.f, 0.f };
+        return pose;
+    }
     // we need an identity pose for creating spaces without offsets
-    static XrPosef identity_pose = {.orientation = {.x = 0, .y = 0, .z = 0, .w = 1.0},
-                                    .position = {.x = 0.0f, .y = 0.0f, .z = 0.0f}};
+    static XrPosef identity_pose = createIdentityPose();
 
 // See https://www.khronos.org/opengl/wiki/Load_OpenGL_Functions
 #ifdef _WIN32
@@ -300,22 +305,21 @@ namespace sibr
         }
 
         // Create XrInstance
-        XrInstanceCreateInfo instance_create_info = {
-            .type = XR_TYPE_INSTANCE_CREATE_INFO,
-            .next = NULL,
-            .createFlags = 0,
-            .applicationInfo =
-                {
-                    // some compilers have trouble with char* initialization
-                    .applicationVersion = 1,
-                    .engineVersion = 0,
-                    .apiVersion = XR_CURRENT_API_VERSION,
-                },
-            .enabledApiLayerCount = 0,
-            .enabledApiLayerNames = NULL,
-            .enabledExtensionCount = (uint32_t)expectedExtensions.size(),
-            .enabledExtensionNames = expectedExtensions.data(),
-        };
+        XrInstanceCreateInfo instance_create_info;
+        instance_create_info.type = XR_TYPE_INSTANCE_CREATE_INFO;
+        instance_create_info.next = NULL;
+        instance_create_info.createFlags = 0;
+
+        XrApplicationInfo applicationInfo;
+        applicationInfo.applicationVersion = 1;
+        applicationInfo.engineVersion = 0;
+        applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+        instance_create_info.applicationInfo = applicationInfo;
+
+        instance_create_info.enabledApiLayerCount = 0;
+        instance_create_info.enabledApiLayerNames = NULL;
+        instance_create_info.enabledExtensionCount = (uint32_t)expectedExtensions.size();
+        instance_create_info.enabledExtensionNames = expectedExtensions.data();
         strncpy(instance_create_info.applicationInfo.applicationName, m_applicationName.c_str(),
                 m_applicationName.length());
         strncpy(instance_create_info.applicationInfo.engineName, "SIBR_core", XR_MAX_ENGINE_NAME_SIZE);
@@ -332,8 +336,10 @@ namespace sibr
             SIBR_LOG << "Unable to retrieve OpenXR runtime name and version" << std::endl;
 
         // --- Get XrSystemId
-        XrSystemGetInfo system_get_info = {
-            .type = XR_TYPE_SYSTEM_GET_INFO, .next = NULL, .formFactor = m_formFactor};
+        XrSystemGetInfo system_get_info;
+        system_get_info.type = XR_TYPE_SYSTEM_GET_INFO;
+        system_get_info.next = NULL;
+        system_get_info.formFactor = m_formFactor;
 
         result = xrGetSystem(m_instance, &system_get_info, &m_systemId);
         if (!xrCheck(m_instance, result, "Failed to get system for HMD form factor."))
@@ -365,8 +371,9 @@ namespace sibr
         m_resolution = getRecommendedResolution();
 
         // OpenXR requires checking graphics requirements before creating a m_session.
-        XrGraphicsRequirementsOpenGLKHR opengl_reqs = {.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR,
-                                                       .next = NULL};
+        XrGraphicsRequirementsOpenGLKHR opengl_reqs;
+        opengl_reqs.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR;
+        opengl_reqs.next = NULL;
 
         // this function pointer was loaded with xrGetInstanceProcAddr
         result = pfnGetOpenGLGraphicsRequirementsKHR(m_instance, m_systemId, &opengl_reqs);
@@ -412,8 +419,10 @@ namespace sibr
 
         SIBR_LOG << "Starting XR session: OpenGL version = " << glGetString(GL_VERSION) << ", renderer = " << glGetString(GL_RENDERER) << std::endl;
 
-        XrSessionCreateInfo m_sessionCreateInfo = {
-            .type = XR_TYPE_SESSION_CREATE_INFO, .next = &graphicsBindingGL, .systemId = m_systemId};
+        XrSessionCreateInfo m_sessionCreateInfo;
+        m_sessionCreateInfo.type = XR_TYPE_SESSION_CREATE_INFO;
+        m_sessionCreateInfo.next = &graphicsBindingGL;
+        m_sessionCreateInfo.systemId = m_systemId;
 
         return createSession(m_sessionCreateInfo) && createReferenceSpace() && createSwapchain() && synchronizeSession();
     }
@@ -439,10 +448,11 @@ namespace sibr
          * Sophisticated apps might check with xrEnumerateReferenceSpaces() if the
          * chosen one is supported and try another one if not.
          * Here we will get an error from xrCreateReferenceSpace() and exit. */
-        XrReferenceSpaceCreateInfo m_playSpace_create_info = {.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
-                                                              .next = NULL,
-                                                              .referenceSpaceType = m_playSpaceType,
-                                                              .poseInReferenceSpace = identity_pose};
+        XrReferenceSpaceCreateInfo m_playSpace_create_info;
+        m_playSpace_create_info.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO;
+        m_playSpace_create_info.next = NULL;
+        m_playSpace_create_info.referenceSpaceType = m_playSpaceType;
+        m_playSpace_create_info.poseInReferenceSpace = identity_pose;
 
         XrResult result = xrCreateReferenceSpace(m_session, &m_playSpace_create_info, &m_playSpace);
         if (!xrCheck(m_instance, result, "Failed to create play space!"))
@@ -479,19 +489,18 @@ namespace sibr
             m_swapchainsImages = (XrSwapchainImageOpenGLKHR **)malloc(sizeof(XrSwapchainImageOpenGLKHR *) * m_viewCount);
             for (uint32_t i = 0; i < m_viewCount; i++)
             {
-                XrSwapchainCreateInfo swapchain_create_info = {
-                    .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
-                    .next = NULL,
-                    .createFlags = 0,
-                    .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
-                    .format = color_format,
-                    .sampleCount = m_viewConfigViews[i].recommendedSwapchainSampleCount,
-                    .width = (uint32_t)m_resolution.x(),
-                    .height = (uint32_t)m_resolution.y(),
-                    .faceCount = 1,
-                    .arraySize = 1,
-                    .mipCount = 1,
-                };
+                XrSwapchainCreateInfo swapchain_create_info;
+				swapchain_create_info.type = XR_TYPE_SWAPCHAIN_CREATE_INFO;
+				swapchain_create_info.next = NULL;
+				swapchain_create_info.createFlags = 0;
+				swapchain_create_info.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+				swapchain_create_info.format = color_format;
+				swapchain_create_info.sampleCount = m_viewConfigViews[i].recommendedSwapchainSampleCount;
+				swapchain_create_info.width = (uint32_t)m_resolution.x();
+				swapchain_create_info.height = (uint32_t)m_resolution.y();
+				swapchain_create_info.faceCount = 1;
+				swapchain_create_info.arraySize = 1;
+				swapchain_create_info.mipCount = 1;
 
                 result = xrCreateSwapchain(m_session, &swapchain_create_info, &m_swapchains[i]);
                 if (!xrCheck(m_instance, result, "Failed to create swapchain %d!", i))
@@ -562,7 +571,9 @@ namespace sibr
     bool OpenXRHMD::pollEvents()
     {
         // Handle runtime Events
-        XrEventDataBuffer runtime_event = {.type = XR_TYPE_EVENT_DATA_BUFFER, .next = NULL};
+        XrEventDataBuffer runtime_event;
+        runtime_event.type = XR_TYPE_EVENT_DATA_BUFFER;
+        runtime_event.next = NULL;
         XrResult poll_result = xrPollEvent(m_instance, &runtime_event);
         if (poll_result == XR_SUCCESS)
         {
@@ -702,9 +713,10 @@ namespace sibr
             // but the runtime did not switch to the next state yet
             if (m_status != SessionStatus::BEGINNING)
             {
-                XrSessionBeginInfo m_session_begin_info = {.type = XR_TYPE_SESSION_BEGIN_INFO,
-                                                           .next = NULL,
-                                                           .primaryViewConfigurationType = m_viewType};
+                XrSessionBeginInfo m_session_begin_info;
+                m_session_begin_info.type = XR_TYPE_SESSION_BEGIN_INFO;
+                m_session_begin_info.next = NULL;
+                m_session_begin_info.primaryViewConfigurationType = m_viewType;
                 XrResult result = xrBeginSession(m_session, &m_session_begin_info);
                 if (!xrCheck(m_instance, result, "Failed to begin ession!"))
                 {
@@ -750,10 +762,14 @@ namespace sibr
     bool OpenXRHMD::waitNextFrame()
     {
         // Wait for head-pose move predication to render next frame
-        m_lastFrameState = {.type = XR_TYPE_FRAME_STATE, .next = NULL};
+        m_lastFrameState.type = XR_TYPE_FRAME_STATE;
+        m_lastFrameState.next = NULL;
         m_lastFrameState.predictedDisplayPeriod = 0;
         m_lastFrameState.predictedDisplayTime = 0;
-        XrFrameWaitInfo frame_wait_info = {.type = XR_TYPE_FRAME_WAIT_INFO, .next = NULL};
+
+        XrFrameWaitInfo frame_wait_info;
+        frame_wait_info.type = XR_TYPE_FRAME_WAIT_INFO;
+        frame_wait_info.next = NULL;
         XrResult result = xrWaitFrame(m_session, &frame_wait_info, &m_lastFrameState);
         if (!xrCheck(m_instance, result, "xrWaitFrame() failed"))
             return false;
@@ -776,14 +792,16 @@ namespace sibr
 #endif
 
         // Get the new view locations
-        XrViewLocateInfo view_locate_info = {.type = XR_TYPE_VIEW_LOCATE_INFO,
-                                             .next = NULL,
-                                             .viewConfigurationType =
-                                                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-                                             .displayTime = m_lastFrameState.predictedDisplayTime,
-                                             .space = m_playSpace};
+        XrViewLocateInfo view_locate_info;
+        view_locate_info.type = XR_TYPE_VIEW_LOCATE_INFO;
+        view_locate_info.next = NULL;
+        view_locate_info.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+        view_locate_info.displayTime = m_lastFrameState.predictedDisplayTime;
+        view_locate_info.space = m_playSpace;
 
-        XrViewState view_state = {.type = XR_TYPE_VIEW_STATE, .next = NULL};
+        XrViewState view_state;
+        view_state.type = XR_TYPE_VIEW_STATE;
+        view_state.next = NULL;
         result = xrLocateViews(m_session, &view_locate_info, &view_state, m_viewCount, &m_viewCount, views);
         if (!xrCheck(m_instance, result, "Could not locate views"))
             return false;
@@ -857,7 +875,9 @@ namespace sibr
             return true;
         }
 
-        XrFrameBeginInfo frame_begin_info = {.type = XR_TYPE_FRAME_BEGIN_INFO, .next = NULL};
+        XrFrameBeginInfo frame_begin_info;
+        frame_begin_info.type = XR_TYPE_FRAME_BEGIN_INFO;
+        frame_begin_info.next = NULL;
 
         XrResult result = xrBeginFrame(m_session, &frame_begin_info);
         if (!xrCheck(m_instance, result, "failed to begin frame!"))
@@ -867,15 +887,18 @@ namespace sibr
         for (uint32_t i = 0; i < m_viewCount; i++)
         {
 
-            XrSwapchainImageAcquireInfo acquire_info = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
-                                                        .next = NULL};
+            XrSwapchainImageAcquireInfo acquire_info;
+            acquire_info.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO;
+            acquire_info.next = NULL;
             uint32_t acquired_index;
             result = xrAcquireSwapchainImage(m_swapchains[i], &acquire_info, &acquired_index);
             if (!xrCheck(m_instance, result, "failed to acquire swapchain image!"))
                 break;
 
-            XrSwapchainImageWaitInfo wait_info = {
-                .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .next = NULL, .timeout = 1000};
+            XrSwapchainImageWaitInfo wait_info;
+            wait_info.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO;
+            wait_info.next = NULL;
+            wait_info.timeout = 1000;
             result = xrWaitSwapchainImage(m_swapchains[i], &wait_info);
             if (!xrCheck(m_instance, result, "failed to wait for swapchain image!"))
                 break;
@@ -888,21 +911,21 @@ namespace sibr
             // renderFunc will render the scene into the framebuffer texture referenced in the view's SwapChainImage (one for each eye)
             renderFunc(i, m_swapchainsImages[i][acquired_index].image);
 
-            XrSwapchainImageReleaseInfo release_info = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
-                                                        .next = NULL};
+            XrSwapchainImageReleaseInfo release_info;
+            release_info.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO;
+            release_info.next = NULL;
             result = xrReleaseSwapchainImage(m_swapchains[i], &release_info);
             if (!xrCheck(m_instance, result, "failed to release swapchain image!"))
                 break;
         }
 
-        XrCompositionLayerProjection projection_layer = {
-            .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-            .next = NULL,
-            .layerFlags = 0,
-            .space = m_playSpace,
-            .viewCount = m_viewCount,
-            .views = m_projectionViews,
-        };
+        XrCompositionLayerProjection projection_layer;
+        projection_layer.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION;
+        projection_layer.next = NULL;
+        projection_layer.layerFlags = 0;
+        projection_layer.space = m_playSpace;
+        projection_layer.viewCount = m_viewCount;
+        projection_layer.views = m_projectionViews;
 
         uint32_t submitted_layer_count = 1;
         const XrCompositionLayerBaseHeader *submitted_layers[1] = {
@@ -911,12 +934,13 @@ namespace sibr
         // Check if the frame meets the deadline (aka predictedDisplayTime).
         updateRefreshReport();
 
-        XrFrameEndInfo frameEndInfo = {.type = XR_TYPE_FRAME_END_INFO,
-                                       .next = NULL,
-                                       .displayTime = m_lastFrameState.predictedDisplayTime,
-                                       .environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
-                                       .layerCount = submitted_layer_count,
-                                       .layers = submitted_layers};
+        XrFrameEndInfo frameEndInfo;
+        frameEndInfo.type = XR_TYPE_FRAME_END_INFO;
+        frameEndInfo.next = NULL;
+        frameEndInfo.displayTime = m_lastFrameState.predictedDisplayTime;
+        frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+        frameEndInfo.layerCount = submitted_layer_count;
+        frameEndInfo.layers = submitted_layers;
 
         result = xrEndFrame(m_session, &frameEndInfo);
         if (!xrCheck(m_instance, result, "failed to end frame!"))
@@ -927,18 +951,21 @@ namespace sibr
 
     bool OpenXRHMD::submitFrame()
     {
-        XrFrameBeginInfo frame_begin_info = {.type = XR_TYPE_FRAME_BEGIN_INFO, .next = NULL};
+        XrFrameBeginInfo frame_begin_info;
+        frame_begin_info.type = XR_TYPE_FRAME_BEGIN_INFO;
+        frame_begin_info.next = NULL;
 
         XrResult result = xrBeginFrame(m_session, &frame_begin_info);
         if (!xrCheck(m_instance, result, "failed to begin frame!"))
             return false;
 
-        XrFrameEndInfo frameEndInfo = {.type = XR_TYPE_FRAME_END_INFO,
-                                       .next = NULL,
-                                       .displayTime = m_lastFrameState.predictedDisplayTime,
-                                       .environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
-                                       .layerCount = 0,
-                                       .layers = NULL};
+        XrFrameEndInfo frameEndInfo;
+		frameEndInfo.type = XR_TYPE_FRAME_END_INFO;
+		frameEndInfo.next = NULL;
+		frameEndInfo.displayTime = m_lastFrameState.predictedDisplayTime;
+		frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+		frameEndInfo.layerCount = 0;
+		frameEndInfo.layers = NULL;
         result = xrEndFrame(m_session, &frameEndInfo);
         if (!xrCheck(m_instance, result, "failed to end frame!"))
             return false;

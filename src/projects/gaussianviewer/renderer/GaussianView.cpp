@@ -635,103 +635,112 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 
 		int w = _resolution.x();
 		int h = _resolution.y();
-
+		
 		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 500);
-
 		timer.setActive(true);
 		timer();
 
-		// Low-res
-		forward(eye, image_cuda_hier[0], w / 2, h / 2, true);
-
-		timer();
-
-		// High-res
-		auto fov = eye.allFov();
-		Camera eye2 = eye;
-		eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
-		// eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
-		// eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
-		// fov = eye2.allFov();
-		forward(eye2, image_cuda_hier[1], w / 2, h / 2);
-
-		timer();
-
-
-		// Upsample
+		std::vector<std::pair<std::string, float>> timings;
+		if (!splatting_settings.foveated_rendering)
 		{
-			NppiSize srcSize = { w / 2, h / 2 };
-			const float* pSrc[] = {
-				image_cuda_hier[0],
-				image_cuda_hier[0] + srcSize.width * srcSize.height,
-				image_cuda_hier[0] + 2 * srcSize.width * srcSize.height
-			};
-			int srcStep = srcSize.width * sizeof(float);
-			NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
-			NppiSize dstSize = { w, h };
-			float* pDst[] = {
-				image_cuda,
-				image_cuda + w * h,
-				image_cuda + 2 * w * h
-			};
-			int dstStep = w * sizeof(float);
-			NppiRect dstRect = { 0, 0, w / 2 * 2, h / 2 * 2 };
-			auto status = nppiResize_32f_P3R(
-				pSrc, srcStep, srcSize, srcRect,
-				pDst, dstStep, dstSize, dstRect,
-				NPPI_INTER_CUBIC
-				// NPPI_INTER_LANCZOS
-			);
-			if (status != NPP_SUCCESS)
+			timer();
+			forward(eye, image_cuda, w, h, false);
+			timer();
+		}
+		else
+		{
+			// Low-res
+			forward(eye, image_cuda_hier[0], w / 2, h / 2, true);
+
+			timer();
+
+			// High-res
+			auto fov = eye.allFov();
+			Camera eye2 = eye;
+			// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
+			eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
+			eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
+			// fov = eye2.allFov();
+			forward(eye2, image_cuda_hier[1], w / 2, h / 2);
+
+			timer();
+
+
+			// Upsample
 			{
-				SIBR_ERR << "NPP error: " << status << std::endl;
+				NppiSize srcSize = { w / 2, h / 2 };
+				const float* pSrc[] = {
+					image_cuda_hier[0],
+					image_cuda_hier[0] + srcSize.width * srcSize.height,
+					image_cuda_hier[0] + 2 * srcSize.width * srcSize.height
+				};
+				int srcStep = srcSize.width * sizeof(float);
+				NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
+				NppiSize dstSize = { w, h };
+				float* pDst[] = {
+					image_cuda,
+					image_cuda + w * h,
+					image_cuda + 2 * w * h
+				};
+				int dstStep = w * sizeof(float);
+				NppiRect dstRect = { 0, 0, w / 2 * 2, h / 2 * 2 };
+				auto status = nppiResize_32f_P3R(
+					pSrc, srcStep, srcSize, srcRect,
+					pDst, dstStep, dstSize, dstRect,
+					NPPI_INTER_CUBIC
+					// NPPI_INTER_LANCZOS
+				);
+				if (status != NPP_SUCCESS)
+				{
+					SIBR_ERR << "NPP error: " << status << std::endl;
+				}
+			}
+
+			// Move high-res image
+			{
+				CudaRasterizer::blend(
+					image_cuda_hier[1],
+					w / 2, h / 2,
+					image_cuda,
+					w, h,
+					w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2 + 0.5f,
+					h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2 + 0.5f,
+					0.1f
+				);
+				// NppiSize srcSize = { w / 2, h / 2 };
+				// const float* pSrc[] = {
+				// 	image_cuda_hier[1],
+				// 	image_cuda_hier[1] + srcSize.width * srcSize.height,
+				// 	image_cuda_hier[1] + 2 * srcSize.width * srcSize.height
+				// };
+				// int srcStep = srcSize.width * sizeof(float);
+				// NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
+				// NppiSize dstSize = { w, h };
+				// float* pDst[] = {
+				// 	image_cuda,
+				// 	image_cuda + w * h,
+				// 	image_cuda + 2 * w * h
+				// };
+				// int dstStep = w * sizeof(float);
+				// int cx = w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2;
+				// int cy = h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2;
+				// NppiRect dstRect = { cx, cy, w / 2, h / 2 };
+				// auto status = nppiResize_32f_P3R(
+				// 	pSrc, srcStep, srcSize, srcRect,
+				// 	pDst, dstStep, dstSize, dstRect,
+				// 	NPPI_INTER_NN
+				// );
+				// if (status != NPP_SUCCESS)
+				// {
+				// 	SIBR_ERR << "NPP error: " << status << std::endl;
+				// }
 			}
 		}
 
-		// Move high-res image
-		{
-			CudaRasterizer::blend(
-				image_cuda_hier[1],
-				w / 2, h / 2,
-				image_cuda,
-				w, h,
-				w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2,
-				h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2,
-				0.1f
-			);
-			// NppiSize srcSize = { w / 2, h / 2 };
-			// const float* pSrc[] = {
-			// 	image_cuda_hier[1],
-			// 	image_cuda_hier[1] + srcSize.width * srcSize.height,
-			// 	image_cuda_hier[1] + 2 * srcSize.width * srcSize.height
-			// };
-			// int srcStep = srcSize.width * sizeof(float);
-			// NppiRect srcRect = { 0, 0, srcSize.width, srcSize.height };
-			// NppiSize dstSize = { w, h };
-			// float* pDst[] = {
-			// 	image_cuda,
-			// 	image_cuda + w * h,
-			// 	image_cuda + 2 * w * h
-			// };
-			// int dstStep = w * sizeof(float);
-			// int cx = w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2;
-			// int cy = h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2;
-			// NppiRect dstRect = { cx, cy, w / 2, h / 2 };
-			// auto status = nppiResize_32f_P3R(
-			// 	pSrc, srcStep, srcSize, srcRect,
-			// 	pDst, dstStep, dstSize, dstRect,
-			// 	NPPI_INTER_NN
-			// );
-			// if (status != NPP_SUCCESS)
-			// {
-			// 	SIBR_ERR << "NPP error: " << status << std::endl;
-			// }
-		}
-
 		timer();
-		
-		std::vector<std::pair<std::string, float>> timings;
 		timer.syncAddReport(timings);
+	
+		
 
 		if (timings.size() > 0)
 		{
@@ -917,10 +926,12 @@ void sibr::GaussianView::onGUI()
 			}
 
 
+			ImGui::Checkbox("Foveated Rendering", &splatting_settings.foveated_rendering);
 			ImGui::Checkbox("Rect Culling", &splatting_settings.culling_settings.rect_bounding);
 			ImGui::Checkbox("Opacity Culling", &splatting_settings.culling_settings.tight_opacity_bounding);
 			ImGui::Checkbox("Tile-based Culling", &splatting_settings.culling_settings.tile_based_culling);
 			ImGui::Checkbox("Load Balancing", &splatting_settings.load_balancing);
+			ImGui::Checkbox("Optimal Projection", &splatting_settings.optimal_projection);
 			ImGui::Checkbox("Proper EWA Scaling", &splatting_settings.proper_ewa_scaling);
 		}
 
