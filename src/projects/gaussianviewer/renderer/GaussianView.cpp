@@ -443,6 +443,12 @@ void sibr::GaussianView::parseJSON()
 	// get settings from config
 	splatting_settings = js.get<CudaRasterizer::SplattingSettings>();
 
+	// log splatting settings just in case
+	if (splatting_settings.foveated_rendering)
+		SIBR_LOG << "Using Foveated Rendering" << std::endl;
+	else
+		SIBR_LOG << "Not Using Foveated Rendering" << std::endl;
+
 	// sanity checks
 	if (CudaRasterizer::isInvalidSortMode(splatting_settings.sort_settings.sort_mode))
 	{
@@ -636,32 +642,39 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		int w = _resolution.x();
 		int h = _resolution.y();
 		
-		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 500);
+		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 25);
+		
 		timer.setActive(true);
 		timer();
+
+		Camera eye2 = eye;
+		if (eye2.isSym()) {
+			float fovv = eye.fovy();
+			float fovh = fovv * eye2.aspect();
+			eye2.setAllFov({ -fovh / 2, fovh / 2, -fovv / 2, fovv / 2 });
+		}
 
 		std::vector<std::pair<std::string, float>> timings;
 		if (!splatting_settings.foveated_rendering)
 		{
 			timer();
-			forward(eye, image_cuda, w, h, false);
+			forward(eye2, image_cuda, w, h, !eye.isSym());
 			timer();
 		}
 		else
 		{
 			// Low-res
-			forward(eye, image_cuda_hier[0], w / 2, h / 2, true);
+			forward(eye2, image_cuda_hier[0], w / 2, h / 2, !eye.isSym());
 
 			timer();
 
-		// High-res
-		auto fov = eye.allFov();
-		Camera eye2 = eye;
-		// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
-		eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
-		eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
-		// fov = eye2.allFov();
-		forward(eye2, image_cuda_hier[1], w / 2, h / 2);
+			// High-res
+			auto fov = eye2.allFov();
+			// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
+			eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
+			eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
+			// fov = eye2.allFov();
+			forward(eye2, image_cuda_hier[1], w / 2, h / 2);
 
 			timer();
 
@@ -696,8 +709,8 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				}
 			}
 
-		// Move high-res image
-		{
+			// Move high-res image
+
 			CudaRasterizer::blend(
 				image_cuda_hier[1],
 				w / 2, h / 2,

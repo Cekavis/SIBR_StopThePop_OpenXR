@@ -24,7 +24,6 @@
 #include <boost/filesystem.hpp>
 #include <regex>
 #include <imgui/imgui_internal.h>
-#include <nvtx3/nvtx3.hpp>
 
 namespace fs = boost::filesystem;
 
@@ -266,16 +265,13 @@ int main(int ac, char** av)
 	// Main looooooop.
 	while (window.isOpened()) 
 	{
-		nvtx3::mark("Main loop start");
 		sibr::Input::poll();
 		window.makeContextCurrent();
 		if (sibr::Input::global().key().isPressed(sibr::Key::Escape)) {
 			window.close();
 		}
 
-		nvtx3::mark("Update");
 		multiViewManager.onUpdate(sibr::Input::global());
-		nvtx3::mark("Render");
 		multiViewManager.onRender(window);
 
 		window.swapBuffer();
