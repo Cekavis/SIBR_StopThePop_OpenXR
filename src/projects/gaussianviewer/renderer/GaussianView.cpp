@@ -641,14 +641,20 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		timer.setActive(true);
 		timer();
 
+		Camera eye2 = eye;
+		if (eye2.isSym()) {
+			float fovv = eye.fovy();
+			float fovh = fovv * eye2.aspect();
+			eye2.setAllFov({ -fovh / 2, fovh / 2, -fovv / 2, fovv / 2 });
+		}
+
 		// Low-res
-		forward(eye, image_cuda_hier[0], w / 2, h / 2, true);
+		forward(eye2, image_cuda_hier[0], w / 2, h / 2, !eye.isSym());
 
 		timer();
 
 		// High-res
-		auto fov = eye.allFov();
-		Camera eye2 = eye;
+		auto fov = eye2.allFov();
 		// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
 		eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
 		eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});

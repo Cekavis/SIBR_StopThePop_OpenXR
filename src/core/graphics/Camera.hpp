@@ -34,7 +34,7 @@ namespace sibr
 		Camera( void ):
 			_matViewProj(Matrix4f::Identity()), _invMatViewProj(Matrix4f::Identity()),
 			_dirtyViewProj(true), _savePath(""), _debugVideoFrames(false),
-			_fov(70.f/180.0f*float(M_PI)), _aspect(1.f), _znear(0.01f), _zfar(1000.f), _right(1.0f), _top(1.0f), _isOrtho(false), _p(0.5f, 0.5f) { }
+			_fov(70.f/180.0f*float(M_PI)), _aspect(1.f), _znear(0.01f), _zfar(1000.f), _right(1.0f), _top(1.0f), _isOrtho(false), _p(0.5f, 0.5f), _sym(true) { }
 
 		/** Set the camera pose.
 		\param translation the camera translation
@@ -282,10 +282,13 @@ namespace sibr
 		/** Set all field of view
 		 * \param all_fov the field of view
 		 */
-		void				setAllFov(const Eigen::Vector4f& all_fov) { _all_fov = all_fov; _dirtyViewProj = true; }
+		void				setAllFov(const Eigen::Vector4f& all_fov) { _all_fov = all_fov; _sym = false; _dirtyViewProj = true; }
 
 		/** \return the field of view */
 		const Eigen::Vector4f&	allFov( void ) const { return _all_fov; }
+
+		/** \return if the camera is symmetrical */
+		bool isSym(void) const { return _sym; }
 		
 	protected:
 
@@ -311,6 +314,7 @@ namespace sibr
 		Transform3f     _rightTransform; ///< The pose of the right eye.
 		std::pair<uint32_t*, uint32_t*>	_visibilityMask; ///< Visibility mask.
 		Eigen::Vector4f _all_fov; ///< All the field of view
+		bool			_sym; /// Are the fovs symmetrical.
 	};
 
 	/** Write a camera to a byte stream.
