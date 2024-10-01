@@ -406,6 +406,7 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&vismask_cuda, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&vismasksum_cuda, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4));
 
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_tmp, _resolution.x() * _resolution.y() * 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[0], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[1], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
 	
@@ -610,7 +611,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
-			
+
 			if (mask)
 			{				
 				auto uploadVisibilityMask = [&](bool fullres)
@@ -739,8 +740,16 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 		if (true)
 		{
 			timer();
-			forward(eye2, image_cuda, w, h, true, !splatting_settings.foveated_rendering);
+			forward(eye2, blur ? image_cuda_tmp : image_cuda, w, h, true, !splatting_settings.foveated_rendering);
 			timer();
+			
+			if (blur)
+				CudaRasterizer::blur3x3(
+					image_cuda_tmp,
+					mask_cuda,
+					image_cuda,
+					w, h
+				);
 		}
 		else
 		{
@@ -1025,6 +1034,7 @@ void sibr::GaussianView::onGUI()
 			ImGui::Checkbox("Load Balancing", &splatting_settings.load_balancing);
 			ImGui::Checkbox("Optimal Projection", &splatting_settings.optimal_projection);
 			ImGui::Checkbox("Proper EWA Scaling", &splatting_settings.proper_ewa_scaling);
+			ImGui::Checkbox("Blur", &blur);
 		}
 
 

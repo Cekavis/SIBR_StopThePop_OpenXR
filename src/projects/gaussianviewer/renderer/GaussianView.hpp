@@ -147,11 +147,14 @@ namespace sibr {
 		float* proj_inv_cuda;
 		float* cam_pos_cuda;
 		float* background_cuda;
+
+		bool blur = true;
 		
         std::pair<uint32_t*, uint32_t*> m_visibilityMask_fullres = { nullptr, nullptr };
         std::pair<uint32_t*, uint32_t*> m_visibilityMask_halfres = { nullptr, nullptr };
 
 		float* image_cuda_hier[2];
+		float* image_cuda_tmp;
 
 		float _scalingModifier = 1.0f;
 		GaussianData* gData;
