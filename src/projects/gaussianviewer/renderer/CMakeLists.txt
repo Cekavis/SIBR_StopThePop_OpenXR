@@ -12,7 +12,7 @@ project(sibr_${SIBR_PROJECT} LANGUAGES CXX)
 
 sibr_gitlibrary(TARGET CudaRasterizer
     GIT_REPOSITORY 	"https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization.git"
-    GIT_TAG			"main"
+    GIT_TAG			"single_pass_foveated"
 )
 
 find_package(CUDAToolkit REQUIRED)
