@@ -319,6 +319,10 @@ namespace sibr {
 		if (_startCam >= _interpPath.size() - 1) {
 			_interpFactor = 0;
 			_startCam = 0;
+			
+			std::cout << "FIN" << std::endl;
+			if (num_interps >= MAX_NUM_INTERPS) { exit(1); }
+			num_interps++;
 		}
 
 		float k = std::min(std::max(((_interpFactor) / (float)SIBR_INTERPOLATE_FRAMES), 1e-6f), 1.0f - 1e-6f);

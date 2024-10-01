@@ -274,10 +274,14 @@ namespace sibr
 		/** Set visibility mask
 		 * \param visibilityMask the visibility mask
 		 */
-		void				setVisibilityMask(std::pair<uint32_t*, uint32_t*> visibilityMask) { _visibilityMask = visibilityMask; }
+		void				setVisibilityMaskFullres(std::pair<uint32_t*, uint32_t*> visibilityMask) { _visibilityMask_fullres = visibilityMask; }
+		/** Set halfres visibility mask
+		 * \param visibilityMask the visibility mask
+		 */
+		void				setVisibilityMaskHalfres(std::pair<uint32_t*, uint32_t*> visibilityMask) { _visibilityMask_halfres = visibilityMask; }
 
 		/** \return the visibility mask */
-		std::pair<uint32_t*, uint32_t*>	visibilityMask( void ) const { return _visibilityMask; }
+		std::pair<uint32_t*, uint32_t*>	visibilityMask( bool fullres ) const { return fullres ? _visibilityMask_fullres : _visibilityMask_halfres; }
 
 		/** Set all field of view
 		 * \param all_fov the field of view
@@ -311,7 +315,8 @@ namespace sibr
 		bool			_isOrtho; ///< Is the camera orthographic.
 
 		Transform3f     _rightTransform; ///< The pose of the right eye.
-		std::pair<uint32_t*, uint32_t*>	_visibilityMask; ///< Visibility mask.
+		std::pair<uint32_t*, uint32_t*>	_visibilityMask_fullres = {nullptr, nullptr}; ///< Visibility mask.
+		std::pair<uint32_t*, uint32_t*>	_visibilityMask_halfres = {nullptr, nullptr}; ///< Visibility mask.
 		Eigen::Vector4f _all_fov; ///< All the field of view
 		bool _sym; ///< All the field of view
 	};

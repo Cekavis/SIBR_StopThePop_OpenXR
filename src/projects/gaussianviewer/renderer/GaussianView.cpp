@@ -403,8 +403,9 @@ sibr::GaussianView::GaussianView(const sibr::BasicIBRScene::Ptr & ibrScene, uint
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&background_cuda, 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&rect_cuda, 2 * P * sizeof(int)));
 
-	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_cuda, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4));
-	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&visibility_mask_sum_cuda, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&vismask_cuda, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4));
+	CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&vismasksum_cuda, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4));
+
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[0], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
 	CUDA_SAFE_CALL_ALWAYS(cudaMalloc(&image_cuda_hier[1], (_resolution.x() / 2) * (_resolution.y() / 2) * 3 * sizeof(float)));
 	
@@ -549,6 +550,35 @@ void sibr::GaussianView::setScene(const sibr::BasicIBRScene::Ptr & newScene)
 	_scene->cameras()->debugFlagCameraAsUsed(imgs_ulr);
 }
 
+void sibr::GaussianView::initMaskCuda(const sibr::Camera& eye, int w, int h, uint32_t* contributing_tiles)
+{
+	if (mask_cuda == nullptr)
+		CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&mask_cuda, sizeof(float) * h * w));
+
+	CUDA_SAFE_CALL_ALWAYS(cudaMemset(mask_cuda, 0, sizeof(float) * h * w));
+
+	auto fov = eye.allFov();
+
+	// obtain mask with the modified blendCuda
+	CudaRasterizer::getAlphaMask(
+		w / 2, h / 2,
+		mask_cuda,
+		w, h,
+		w / (tan(fov.y()) - tan(fov.x())) * tan(-fov.x()) / 2 + 0.5,
+		h / (tan(fov.w()) - tan(fov.z())) * tan(fov.w()) / 2 + 0.5,
+		0.1f
+	);
+
+	int num_16x16_tiles{((w + 16 - 1) / 16) * ((h + 16 - 1) / 16)};
+	int num_32x32_tiles{((w + 32 - 1) / 32) * ((h + 32 - 1) / 32)};
+
+	if (rangemap_cuda == nullptr)
+		CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&rangemap_cuda, sizeof(uint32_t) * num_16x16_tiles));
+
+	CUDA_SAFE_CALL_ALWAYS(cudaMemset(rangemap_cuda, 0, sizeof(uint32_t) *num_16x16_tiles));
+	_num_tiles = CudaRasterizer::Rasterizer::computeTileBoundaries(rangemap_cuda, w, h, mask_cuda, contributing_tiles);
+}
+
 void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Camera & eye)
 {
 	if (currMode == "Ellipsoids")
@@ -561,7 +591,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 	}
 	else
 	{
-		auto forward = [&](const sibr::Camera& eye, float* image_cuda_curr, int x, int y, bool mask = false) {
+		auto forward = [&](const sibr::Camera& eye, float* image_cuda_curr, int x, int y, bool mask, bool fullres) {
 			// Convert view and projection to target coordinate system
 			auto view_mat = eye.view();
 			auto proj_mat = eye.viewproj();
@@ -580,15 +610,25 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			CUDA_SAFE_CALL(cudaMemcpy(proj_cuda, proj_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(proj_inv_cuda, proj_inv_mat.data(), sizeof(sibr::Matrix4f), cudaMemcpyHostToDevice));
 			CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
+			
 			if (mask)
-			{
-				// auto start = std::chrono::steady_clock::now();
-				CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_cuda, eye.visibilityMask().first, (((_resolution.x() + 15) / 16) * ((_resolution.y() + 15) / 16) + 31) / 32 * 4, cudaMemcpyHostToDevice));
-				CUDA_SAFE_CALL(cudaMemcpy(visibility_mask_sum_cuda, eye.visibilityMask().second, ((_resolution.x() + 15) / 16 + 1) * ((_resolution.y() + 15) / 16 + 1) * 4, cudaMemcpyHostToDevice));
-				// cudaDeviceSynchronize();
-				// auto end = std::chrono::steady_clock::now();
-				// double elapsed_seconds = std::chrono::duration<double>(end - start).count();
-				// SIBR_LOG << "Mask transfer time: " << elapsed_seconds * 1000 << std::endl;
+			{				
+				auto uploadVisibilityMask = [&](bool fullres)
+				{
+					const int tileSize = fullres ? 16 : 32;
+					const int tileW = (_resolution.x() + tileSize - 1) / tileSize;
+					const int tileH = (_resolution.y() + tileSize - 1) / tileSize;
+
+					const int mask_size = (tileW * tileH + 31) / 32 * 4;
+					const int mask_sum_size = (tileW + 1) * (tileH + 1) * 4;
+					
+					CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(vismask_cuda, eye.visibilityMask(fullres).first, mask_size, cudaMemcpyHostToDevice));
+					CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(vismasksum_cuda, eye.visibilityMask(fullres).second, mask_sum_size, cudaMemcpyHostToDevice));
+				};
+				
+				uploadVisibilityMask(fullres);
+				
+				initMaskCuda(eye, x, y, vismask_cuda);
 			}
 
 			// Rasterize
@@ -598,7 +638,7 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				geomBufferFunc,
 				binningBufferFunc,
 				imgBufferFunc,
-				count, _sh_degree, 16,
+				count, _sh_degree, 16, _num_tiles,
 				background_cuda,
 				x, y,
 				splatting_settings,
@@ -615,14 +655,16 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				proj_cuda,
 				proj_inv_cuda,
 				cam_pos_cuda,
+				rangemap_cuda,
+				mask_cuda,
 				tan_fovx,
 				tan_fovy,
 				false,
 				image_cuda_curr,
 				nullptr,
-				false,
-				mask ? visibility_mask_cuda : nullptr,
-				mask ? visibility_mask_sum_cuda : nullptr
+				true,
+				mask ? vismask_cuda : nullptr,
+				mask ? vismasksum_cuda : nullptr
 			);
 		};
 
@@ -641,30 +683,69 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 
 		int w = _resolution.x();
 		int h = _resolution.y();
+
+		Camera eye2 = eye;
+		if (eye.isSym() && m_visibilityMask_fullres.first == nullptr)
+		{
+			auto loadVisibilityMask = [&](const std::string filename, const int tileSize) {
+
+				const int tileW = (w + tileSize - 1) / tileSize;
+				const int tileH = (h + tileSize - 1) / tileSize;
+
+				const int mask_size = (tileW * tileH + 31) / 32 * 4;
+				uint32_t* mask = (uint32_t*) malloc(mask_size);
+
+				std::string mask_folder = "masks_2064x2272";
+				std::string mask_filename = mask_folder + "/" + filename + ".dat";
+				std::string mask_sum_filename = mask_folder + "/" + filename + "_sum.dat";
+				
+				std::ifstream infile{mask_filename, std::ios::binary};
+				infile.read((char *) mask, mask_size);
+				infile.close();
+
+				const int mask_sum_size = (tileW + 1) * (tileH + 1) * 4;
+				uint32_t* mask_sum = (uint32_t*) malloc(mask_sum_size);
+
+				std::ifstream infile_sum{mask_sum_filename, std::ios::binary};
+				infile_sum.read((char *) mask_sum, mask_sum_size);
+				infile_sum.close();
+
+				return std::pair<uint32_t*, uint32_t*>(mask, mask_sum);
+			};
+			
+			m_visibilityMask_fullres = loadVisibilityMask("fullres_mask_right", 16);
+			m_visibilityMask_halfres = loadVisibilityMask("halfres_mask_right", 32);
+		}
+
+		if (eye.isSym())
+		{
+			float fovv = eye.fovy();
+			float fovh = fovv * eye2.aspect();
+			eye2.setAllFov({ -fovh / 2, fovh / 2, -fovv / 2, fovv / 2 });
+
+			if (m_visibilityMask_fullres.first != nullptr)
+			{
+				eye2.setVisibilityMaskFullres(m_visibilityMask_fullres);
+				eye2.setVisibilityMaskHalfres(m_visibilityMask_halfres);
+			}
+		}
 		
 		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 25);
 		
 		timer.setActive(true);
 		timer();
-
-		Camera eye2 = eye;
-		if (eye2.isSym()) {
-			float fovv = eye.fovy();
-			float fovh = fovv * eye2.aspect();
-			eye2.setAllFov({ -fovh / 2, fovh / 2, -fovv / 2, fovv / 2 });
-		}
-
+		
 		std::vector<std::pair<std::string, float>> timings;
-		if (!splatting_settings.foveated_rendering)
+		if (true)
 		{
 			timer();
-			forward(eye2, image_cuda, w, h, !eye.isSym());
+			forward(eye2, image_cuda, w, h, true, !splatting_settings.foveated_rendering);
 			timer();
 		}
 		else
 		{
 			// Low-res
-			forward(eye2, image_cuda_hier[0], w / 2, h / 2, !eye.isSym());
+			forward(eye2, image_cuda_hier[0], w / 2, h / 2, true, splatting_settings.foveated_rendering);
 
 			timer();
 
@@ -674,10 +755,9 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			eye2.fovy(atan(tan(fov.w()) * 0.5f) - atan(tan(fov.z()) * 0.5f));
 			eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
 			// fov = eye2.allFov();
-			forward(eye2, image_cuda_hier[1], w / 2, h / 2);
+			forward(eye2, image_cuda_hier[1], w / 2, h / 2, false, true);
 
 			timer();
-
 
 			// Upsample
 			{
@@ -1034,8 +1114,6 @@ sibr::GaussianView::~GaussianView()
 	cudaFree(background_cuda);
 	cudaFree(rect_cuda);
 
-	cudaFree(visibility_mask_cuda);
-	cudaFree(visibility_mask_sum_cuda);
 	for (int i = 0; i < 2; i++)
 		cudaFree(image_cuda_hier[i]);
 

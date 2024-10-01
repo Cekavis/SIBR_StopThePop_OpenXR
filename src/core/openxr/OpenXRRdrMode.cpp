@@ -11,6 +11,7 @@
 #include <core/assets/Resources.hpp>
 #include <core/openxr/OpenXRRdrMode.hpp>
 #include <core/openxr/SwapchainImageRenderTarget.hpp>
+#include <fstream>
 
 namespace sibr
 {
@@ -59,9 +60,14 @@ namespace sibr
             SIBR_ERR << "Failed to connect to OpenXR" << std::endl;
         }
 
+
         // Initialize visibility mask
-        m_visibilityMask[0] = initVisibilityMask(OpenXRHMD::Eye::LEFT);
-        m_visibilityMask[1] = initVisibilityMask(OpenXRHMD::Eye::RIGHT);
+        bool write = false;
+        m_visibilityMask_fullres[0] = initVisibilityMask(OpenXRHMD::Eye::LEFT, 16, false, "fullres_mask_left", write);
+        m_visibilityMask_fullres[1] = initVisibilityMask(OpenXRHMD::Eye::RIGHT, 16, false, "fullres_mask_right", write);
+        
+        m_visibilityMask_halfres[0] = initVisibilityMask(OpenXRHMD::Eye::LEFT, 32, false, "halfres_mask_left", write);
+        m_visibilityMask_halfres[1] = initVisibilityMask(OpenXRHMD::Eye::RIGHT, 32, false, "halfres_mask_right", write);
 
         SIBR_LOG << "Disable VSync: use headset synchronization." << std::endl;
         window.setVsynced(false);
@@ -126,8 +132,8 @@ namespace sibr
                                      cam.principalPoint(Eigen::Vector2f(1.f, 1.f) - this->m_openxrHmd->getScreenCenter(eye));
                                      cam.perspective(fov.w() - fov.z(), aspect, cam.znear(), cam.zfar());
 
-
-                                     cam.setVisibilityMask(m_visibilityMask[viewIndex]);
+                                     cam.setVisibilityMaskFullres(m_visibilityMask_fullres[viewIndex]);
+                                     cam.setVisibilityMaskHalfres(m_visibilityMask_halfres[viewIndex]);
 
                                      // Get the render target holding the swapchain image's texture from the pool
                                      auto rt = getRenderTarget(texture, w, h);
@@ -288,7 +294,7 @@ namespace sibr
         return c;
     }
 
-    std::pair<uint32_t*, uint32_t*> OpenXRRdrMode::initVisibilityMask(OpenXRHMD::Eye eye)
+    std::pair<uint32_t*, uint32_t*> OpenXRRdrMode::initVisibilityMask(OpenXRHMD::Eye eye, const int tileSize, bool innerInvisible, const std::string filename, const bool write)
     {
         // Get visibility mask
         XrVisibilityMaskKHR visibilityMask;
@@ -303,14 +309,16 @@ namespace sibr
         const int w = m_openxrHmd->getResolution().x();
         const int h = m_openxrHmd->getResolution().y();
 
-        const int tileSize = 32;
-
         const int tileW = (w + tileSize - 1) / tileSize;
         const int tileH = (h + tileSize - 1) / tileSize;
-        uint32_t* mask = (uint32_t*) malloc((tileW * tileH + 31) / 32 * 4);
-        memset(mask, -1, (tileW * tileH + 31) / 32 * 4);
-        uint32_t* mask_sum = (uint32_t*) malloc((tileW + 1) * (tileH + 1) * 4);
-        memset(mask_sum, 0, (tileW + 1) * (tileH + 1) * 4);
+
+        const int mask_size = (tileW * tileH + 31) / 32 * 4;
+        uint32_t* mask = (uint32_t*) malloc(mask_size);
+        memset(mask, -1, mask_size);
+
+        const int mask_sum_size = (tileW + 1) * (tileH + 1) * 4;
+        uint32_t* mask_sum = (uint32_t*) malloc(mask_sum_size);
+        memset(mask_sum, 0, mask_sum_size);
 
         if (visibilityMask.vertexCountOutput > 0)
         {
@@ -349,7 +357,7 @@ namespace sibr
                       x + tileSize > cx + w / 2 - w * ratio / 2 ||
                       y < cy + h * ratio / 2 ||
                       y + tileSize > cy + h / 2 - h * ratio / 2;
-            if (!in) mask[idx / 32] &= ~(1u << (idx % 32));
+            if (innerInvisible && !in) mask[idx / 32] &= ~(1u << (idx % 32));
         }
 
         for (int i = 1; i <= tileW; i++) for (int j = 1; j <= tileH; j++)
@@ -368,21 +376,32 @@ namespace sibr
             mask_sum[i * (tileH + 1) + j] += mask_sum[i * (tileH + 1) + j - 1];
         }
 
-        for (int j = tileH - 1; j >= 0; j--)
+        // for (int j = tileH - 1; j >= 0; j--)
+        // {
+        //     for (int i = 0; i < tileW; i++)
+        //     {
+        //         int idx = i * tileH + j;
+        //         if (mask[idx / 32] & (1 << (idx % 32)))
+        //         {
+        //             printf("X");
+        //         }
+        //         else
+        //         {
+        //             printf(".");
+        //         }
+        //     }
+        //     printf("\n");
+        // }
+
+        if (write)
         {
-            for (int i = 0; i < tileW; i++)
-            {
-                int idx = i * tileH + j;
-                if (mask[idx / 32] & (1 << (idx % 32)))
-                {
-                    printf("X");
-                }
-                else
-                {
-                    printf(".");
-                }
-            }
-            printf("\n");
+            std::ofstream fout(filename + ".dat", std::ios::binary);
+            fout.write((char*) mask, mask_size);
+            fout.close();
+            
+            std::ofstream fout_sum(filename + "_sum.dat", std::ios::binary);
+            fout_sum.write((char*) mask_sum, mask_sum_size);
+            fout_sum.close();
         }
 
         return std::make_pair(mask, mask_sum);

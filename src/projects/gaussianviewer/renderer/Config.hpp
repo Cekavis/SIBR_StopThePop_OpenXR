@@ -49,6 +49,8 @@ namespace sibr {
 		Arg<int> device = {"device", 0, "CUDA device index"};
 		Arg<bool> loadImages = { "load_images", "Whether or not to load images for scene overview."};
 		Arg<bool> noInterop = { "no_interop", "Don't try to use interop (may be required for unconventional OpenGL setups, like WSL)" };
+		
+		Arg<bool> profile = { "profile", "Whether or not to profile with interpolation path."};
 	};
 
 }

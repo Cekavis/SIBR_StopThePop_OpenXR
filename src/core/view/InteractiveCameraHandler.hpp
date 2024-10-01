@@ -248,6 +248,9 @@ namespace sibr {
 		bool _isSetup; ///< Is the handler setup.
 		float _cameraFovDeg = 0.0f; ///< Camera field of view in degrees (for GUI).
 		bool _fribrExport = false; ///< Switch to FRIBR compatible export mode for paths.
+		
+		int num_interps = 0;
+		const int MAX_NUM_INTERPS = 4;
 
 		/** Interpolate along the path. */
 		void interpolate();

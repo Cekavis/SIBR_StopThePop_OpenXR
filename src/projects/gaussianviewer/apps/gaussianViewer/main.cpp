@@ -251,7 +251,24 @@ int main(int ac, char** av)
 	multiViewManager.addSubView("Top view", topView, usedResolution);
 	CHECK_GL_ERROR;
 	topView->active(false);
+	
+	if (myArgs.profile)
+	{
+		sibr::Input::poll();
+		window.makeContextCurrent();
+		if (sibr::Input::global().key().isPressed(sibr::Key::Escape)) {
+			window.close();
+		}
 
+		multiViewManager.onUpdate(sibr::Input::global());
+		multiViewManager.onRender(window);
+
+		window.swapBuffer();
+		CHECK_GL_ERROR;
+
+
+		generalCamera->switchMode(InteractiveCameraHandler::InteractionMode::INTERPOLATION);
+	}
 	// save images
 	generalCamera->getCameraRecorder().setViewPath(gaussianView, myArgs.dataset_path.get());
 	if (myArgs.pathFile.get() !=  "" ) 

@@ -68,10 +68,12 @@ namespace sibr
         bool m_appFocused = false;                               ///< Application is visible and focused in the headset)
         int m_downscaleResolution = 1.0f;                        ///< Downscale rendering resolution to improve performance
         RenderTarget::UPtr _leftRT, _rightRT;                    ///< Only used to implement abstract method lRT andrRT!
-        std::pair<uint32_t*, uint32_t*> m_visibilityMask[2];     ///< Visibility mask for each eye
+
+        std::pair<uint32_t*, uint32_t*> m_visibilityMask_fullres[2];     ///< Visibility mask for each eye
+        std::pair<uint32_t*, uint32_t*> m_visibilityMask_halfres[2];     ///< Visibility mask for each eye
 
         SwapchainImageRenderTarget::Ptr getRenderTarget(uint32_t texture, uint w, uint h);
-        std::pair<uint32_t*, uint32_t*> initVisibilityMask(OpenXRHMD::Eye eye);
+        std::pair<uint32_t*, uint32_t*> initVisibilityMask(OpenXRHMD::Eye eye, const int tileSize, bool innerInvisible, const std::string filename, const bool write = false);
     };
 
 } /*namespace sibr*/

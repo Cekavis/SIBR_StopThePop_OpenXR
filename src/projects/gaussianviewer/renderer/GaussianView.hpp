@@ -108,6 +108,8 @@ namespace sibr {
 			}
 		};
 
+		void initMaskCuda(const sibr::Camera& eye, int w, int h, uint32_t* contributing_tiles);
+
 		std::string currMode = "Splats";
 
 		bool _cropping = false;
@@ -126,6 +128,12 @@ namespace sibr {
 		float* opacity_cuda;
 		float* shs_cuda;
 		int* rect_cuda;
+		
+		float* mask_cuda = nullptr;
+		uint32_t* rangemap_cuda = nullptr;
+		uint32_t* vismask_cuda = nullptr;
+		uint32_t* vismasksum_cuda = nullptr;
+		int _num_tiles;
 
 		GLuint imageBuffer = 0;
 		cudaGraphicsResource_t imageBufferCuda;
@@ -139,8 +147,10 @@ namespace sibr {
 		float* proj_inv_cuda;
 		float* cam_pos_cuda;
 		float* background_cuda;
-		uint32_t* visibility_mask_cuda;
-		uint32_t* visibility_mask_sum_cuda;
+		
+        std::pair<uint32_t*, uint32_t*> m_visibilityMask_fullres = { nullptr, nullptr };
+        std::pair<uint32_t*, uint32_t*> m_visibilityMask_halfres = { nullptr, nullptr };
+
 		float* image_cuda_hier[2];
 
 		float _scalingModifier = 1.0f;
