@@ -730,18 +730,10 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 				eye2.setVisibilityMaskHalfres(m_visibilityMask_halfres);
 			}
 		}
-		
-		static CudaRasterizer::Timer timer({ "Low", "High", "Processing" }, 25);
-		
-		timer.setActive(true);
-		timer();
-		
-		std::vector<std::pair<std::string, float>> timings;
+
 		if (true)
 		{
-			timer();
 			forward(eye2, blur ? image_cuda_tmp : image_cuda, w, h, true, !splatting_settings.foveated_rendering);
-			timer();
 			
 			if (blur)
 				CudaRasterizer::blur3x3(
@@ -756,8 +748,6 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			// Low-res
 			forward(eye2, image_cuda_hier[0], w / 2, h / 2, true, splatting_settings.foveated_rendering);
 
-			timer();
-
 			// High-res
 			auto fov = eye2.allFov();
 			// eye2.fovy(atan(tan((fov.w() - fov.z()) / 2) * 0.5f) * 2);
@@ -765,8 +755,6 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			eye2.setAllFov({atan(tan(fov.x()) * 0.5f), atan(tan(fov.y()) * 0.5f), atan(tan(fov.z()) * 0.5f), atan(tan(fov.w()) * 0.5f)});
 			// fov = eye2.allFov();
 			forward(eye2, image_cuda_hier[1], w / 2, h / 2, false, true);
-
-			timer();
 
 			// Upsample
 			{
@@ -836,20 +824,6 @@ void sibr::GaussianView::onRenderIBR(sibr::IRenderTarget & dst, const sibr::Came
 			// {
 			// 	SIBR_ERR << "NPP error: " << status << std::endl;
 			// }
-		}
-
-		timer();
-		timer.syncAddReport(timings);
-	
-		
-
-		if (timings.size() > 0)
-		{
-			std::stringstream ss;
-			ss << "Timings: \n";
-			for (auto const& x : timings)
-				ss << " - " << x.first << ": " << x.second * 2 << "ms\n";
-			std::cout << ss.str() << std::endl;
 		}
 
 		// static int frame_counter = 0;
