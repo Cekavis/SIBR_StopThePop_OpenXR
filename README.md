@@ -1,8 +1,8 @@
 # VRSplat - SIBR
 
-This is the [SIBR viewer](gitlab.inria.fr/sibr/sibr_core/-/tree/gaussian_code_release_openxr) adapted for VRSplat. It uses the `single_pass_foveated` branch of [VRSplat rasterizer](https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization), which is downloaded during CMake configuration.
+This is the [SIBR viewer](gitlab.inria.fr/sibr/sibr_core/-/tree/gaussian_code_release_openxr) adapted for VRSplat. It uses the `single_pass_foveated` branch of [VRSplat rasterizer](https://github.com/Cekavis/VRSplat-Rasterization), which is downloaded during CMake configuration.
 
-Following [StopThePop](https://github.com/r4dl/SIBR_StopThePop/tree/main), the `gaussianviewer` checks for a `config.json` file in the model root directory, and sets the GUI fields accordingly. It defaults to Vanilla 3DGS if no config exists.
+Following [StopThePop](https://github.com/r4dl/SIBR_StopThePop), the `gaussianviewer` checks for a `config.json` file in the model root directory, and sets the GUI fields accordingly. It defaults to Vanilla 3DGS if no config exists.
 
 ## Setup
 
@@ -17,6 +17,8 @@ SIBR_gaussianViewer_app_d.exe -m /path/to/model --rendering-mode 2 --rendering-s
 ```
 
 It will try to find a OpenXR runtime through the environment variable `XR_RUNTIME_JSON` and Windows registry if not set.
+
+**Be sure to toggle the "Foveated Rendering" and "Optimal Projection" options manually in the GUI for a full experience.**
 
 You could use either Virtual Desktop, Meta Quest Link, or SteamVR to connect to your headset. Virtual Desktop yields the best performance.
 
