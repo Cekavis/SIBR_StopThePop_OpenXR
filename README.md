@@ -1,23 +1,30 @@
-## Notes
+# VRSplat - SIBR
 
-This project depends on the `main` branch of [this rasterizer](https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization). It's downloaded during configuring.
+This is the [SIBR viewer](gitlab.inria.fr/sibr/sibr_core/-/tree/gaussian_code_release_openxr) adapted for VRSplat. It uses the `single_pass_foveated` branch of [VRSplat rasterizer](https://github.com/Cekavis/StopThePop-Optimal-Projection-Rasterization), which is downloaded during CMake configuration.
 
-### Optimal Projection
+Following [StopThePop](https://github.com/r4dl/SIBR_StopThePop/tree/main), the `gaussianviewer` checks for a `config.json` file in the model root directory, and sets the GUI fields accordingly. It defaults to Vanilla 3DGS if no config exists.
 
-The introduction of optimal projection broke tile-based culling. The `tile-based-culling` branch fixes the issue but its performance is worse. So only hierarchical culling is used by default.
+## Setup
 
-### Video recording feature
+See the instructions for SIBR Core below.
 
-- These modifications may break some other functionalities, especially the interpolation of the camera. No interpolation or default interpolation are the same, and should work properly.
-- The camera and path files are not compatible with the original version.
-
-#### Usage
+## Usage
 
 Set the resolution of the window (also the capture resolution) to match the rendering resolution using the `--rendering-size` option.
 
 ```sh
 SIBR_gaussianViewer_app_d.exe -m /path/to/model --rendering-mode 2 --rendering-size 4128 2208
 ```
+
+It will try to find a OpenXR runtime through the environment variable `XR_RUNTIME_JSON` and Windows registry if not set.
+
+You could use either Virtual Desktop, Meta Quest Link, or SteamVR to connect to your headset. Virtual Desktop yields the best performance.
+
+## Notes
+
+The introduction of optimal projection broke tile-based culling. The `tile-based-culling` branch contains a solution to the issue but its performance is worse. So only hierarchical culling is used by default.
+
+The camera and path files are not compatible with the original version.
 
 # SIBR Core
 

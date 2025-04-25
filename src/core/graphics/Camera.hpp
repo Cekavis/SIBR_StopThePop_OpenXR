@@ -291,6 +291,7 @@ namespace sibr
 		/** \return the field of view */
 		const Eigen::Vector4f&	allFov( void ) const { return _all_fov; }
 
+		/** \return true if the camera is symmetrical */
 		bool isSym(void) const { return _sym; }
 		
 	protected:
@@ -318,7 +319,7 @@ namespace sibr
 		std::pair<uint32_t*, uint32_t*>	_visibilityMask_fullres = {nullptr, nullptr}; ///< Visibility mask.
 		std::pair<uint32_t*, uint32_t*>	_visibilityMask_halfres = {nullptr, nullptr}; ///< Visibility mask.
 		Eigen::Vector4f _all_fov; ///< All the field of view
-		bool _sym; ///< All the field of view
+		bool _sym; ///< If camera is symmetrical
 	};
 
 	/** Write a camera to a byte stream.

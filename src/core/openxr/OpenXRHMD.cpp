@@ -321,7 +321,7 @@ namespace sibr
         instance_create_info.enabledExtensionCount = (uint32_t)expectedExtensions.size();
         instance_create_info.enabledExtensionNames = expectedExtensions.data();
         strncpy(instance_create_info.applicationInfo.applicationName, m_applicationName.c_str(),
-                m_applicationName.length());
+                m_applicationName.length() + 1);
         strncpy(instance_create_info.applicationInfo.engineName, "SIBR_core", XR_MAX_ENGINE_NAME_SIZE);
 
         result = xrCreateInstance(&instance_create_info, &m_instance);
@@ -476,7 +476,7 @@ namespace sibr
             return false;
 
         // Select swapchain with SRGB format
-        int64_t color_format = selectSwapchainFormat(m_instance, m_session, GL_SRGB8_ALPHA8_EXT, true);
+        int64_t color_format = selectSwapchainFormat(m_instance, m_session, GL_RGBA8, true);
 
         // Create swapchain for main VR rendering
         {
