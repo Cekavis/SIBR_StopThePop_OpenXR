@@ -20,9 +20,11 @@ It will try to find a OpenXR runtime through the environment variable `XR_RUNTIM
 
 **Be sure to toggle the "Foveated Rendering" and "Optimal Projection" options manually in the GUI for a full experience.**
 
-You could use either Virtual Desktop, Meta Quest Link, or SteamVR to connect to your headset. Virtual Desktop yields the best performance.
+You could use either Virtual Desktop, Meta Quest Link, or SteamVR to connect to your VR headset. Virtual Desktop yields the best performance.
 
 ## Notes
+
+The viewer on PC shows darker colors because of a reversed gamma correction. Colors in the headset is correct. To get correct colors on PC, change `GL_SRGB8_ALPHA8_EXT` to `GL_RGBA8` in `src\core\openxr\OpenXRHMD.cpp`. However, this produces brighter colors in the headset.
 
 The introduction of optimal projection broke tile-based culling. The `tile-based-culling` branch contains a solution to the issue but its performance is worse. So only hierarchical culling is used by default.
 

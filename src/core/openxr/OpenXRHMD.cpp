@@ -476,7 +476,7 @@ namespace sibr
             return false;
 
         // Select swapchain with SRGB format
-        int64_t color_format = selectSwapchainFormat(m_instance, m_session, GL_RGBA8, true);
+        int64_t color_format = selectSwapchainFormat(m_instance, m_session, GL_SRGB8_ALPHA8_EXT, true);
 
         // Create swapchain for main VR rendering
         {
