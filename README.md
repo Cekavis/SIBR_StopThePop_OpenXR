@@ -24,7 +24,9 @@ You could use either Virtual Desktop, Meta Quest Link, or SteamVR to connect to 
 
 ## Notes
 
-The viewer on PC shows darker colors because of a reversed gamma correction. Colors in the headset is correct. To get correct colors on PC, change `GL_SRGB8_ALPHA8_EXT` to `GL_RGBA8` in `src\core\openxr\OpenXRHMD.cpp`. However, this produces brighter colors in the headset.
+**The viewer on PC shows darker colors because of a reversed gamma correction. Colors in the headset is correct. To get correct colors on PC, change `GL_SRGB8_ALPHA8_EXT` to `GL_RGBA8` in `src\core\openxr\OpenXRHMD.cpp`. However, this produces brighter colors in the headset.**
+
+**When foveated rendering is enabled, the part of image buffer outside visibility mask is not cleared every time for performance reasons. This causes undesired content outside the mask. However, it should not be visible in the headset when frame rate is high enough so that [ATW](https://www.qualcomm.com/developer/blog/2022/09/virtual-boost-vr-rendering-performance-synchronous-space-warp) is disabled.**
 
 The introduction of optimal projection broke tile-based culling. The `tile-based-culling` branch contains a solution to the issue but its performance is worse. So only hierarchical culling is used by default.
 
