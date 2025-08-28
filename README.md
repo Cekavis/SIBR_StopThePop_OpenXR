@@ -1,6 +1,6 @@
 # VRSplat - SIBR
 
-This is the [SIBR viewer](gitlab.inria.fr/sibr/sibr_core/-/tree/gaussian_code_release_openxr) adapted for VRSplat. It uses the `single_pass_foveated` branch of [VRSplat rasterizer](https://github.com/Cekavis/VRSplat-Rasterization), which is downloaded during CMake configuration.
+This is the [SIBR viewer](https://gitlab.inria.fr/sibr/sibr_core/-/tree/gaussian_code_release_openxr) adapted for VRSplat. It uses the `single_pass_foveated` branch of [VRSplat rasterizer](https://github.com/Cekavis/VRSplat-Rasterization), which is downloaded during CMake configuration.
 
 Following [StopThePop](https://github.com/r4dl/SIBR_StopThePop), the `gaussianviewer` checks for a `config.json` file in the model root directory, and sets the GUI fields accordingly. It defaults to Vanilla 3DGS if no config exists.
 
