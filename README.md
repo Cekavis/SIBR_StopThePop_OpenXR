@@ -63,12 +63,6 @@ This branch supports headed-mounted displays through [OpenXR](#use-a-vr-headset)
 
 **Note**: The current release is for *Windows 10* only. Please not that Visual Studio with c++20 standard is required to compile. We are planning a Linux release soon.
 
-#### Binary distribution
-
-The easiest way to use SIBR is to download the binary distribution. All steps described below, including all preprocessing for your datasets will work using this code.
-
-Download the distribution from the page: https://sibr.gitlabpages.inria.fr/download.html (Core, 57Mb); unzip the file and rename the directory "install".
-
 #### Install requirements
 
 - [**Visual Studio 2019**](https://visualstudio.microsoft.com/fr/downloads/)
